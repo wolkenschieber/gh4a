@@ -32,3 +32,6 @@ Original Markdown Copyright (c) 2004-2005 John Gruber
 
 GitHub Flavored Markdown modifications by Tekkub
 http://github.github.com/github-flavored-markdown/
+
+com.github.mobile.util.HtmlUtils, com.github.mobile.util.HttpImageGetter, com.github.mobile.util.ImageUtils
+https://github.com/github/android/tree/master/app/src/main/java/com/github/mobile/util
