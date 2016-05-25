@@ -83,7 +83,6 @@ import com.github.mobile.util.HttpImageGetter;
 public class PullRequestFragment extends ListDataBaseFragment<IssueEventHolder> implements
         View.OnClickListener, IssueEventAdapter.OnEditComment, CommentBoxFragment.Callback {
     private static final int REQUEST_EDIT = 1000;
-    private static final int REQUEST_EDIT_ISSUE = 1001;
 
     public interface StateChangeListener {
         void onPullRequestStateChanged(PullRequest newState);
@@ -99,7 +98,6 @@ public class PullRequestFragment extends ListDataBaseFragment<IssueEventHolder> 
     private CommentBoxFragment mCommentFragment;
     private IssueEventAdapter mAdapter;
     private HttpImageGetter mImageGetter;
-    private View mEditButton;
 
     private LoaderCallbacks<List<CommitStatus>> mStatusCallback =
             new LoaderCallbacks<List<CommitStatus>>(this) {
@@ -115,20 +113,6 @@ public class PullRequestFragment extends ListDataBaseFragment<IssueEventHolder> 
         }
     };
 
-    private LoaderCallbacks<Issue> mIssueCallback = new LoaderCallbacks<Issue>(this) {
-        @Override
-        protected Loader<LoaderResult<Issue>> onCreateLoader() {
-            return new IssueLoader(getActivity(), mRepoOwner, mRepoName, mPullRequest.getNumber());
-        }
-
-        @Override
-        protected void onResultReady(Issue result) {
-            mIssue = result;
-            updateEditButtonVisibility();
-            fillLabels(result.getLabels());
-        }
-    };
-
     private LoaderCallbacks<Boolean> mCollaboratorCallback = new LoaderCallbacks<Boolean>(this) {
         @Override
         protected Loader<LoaderResult<Boolean>> onCreateLoader() {
@@ -138,16 +122,16 @@ public class PullRequestFragment extends ListDataBaseFragment<IssueEventHolder> 
         protected void onResultReady(Boolean result) {
             mIsCollaborator = result;
             updateCommentLockState();
-            updateEditButtonVisibility();
             getActivity().supportInvalidateOptionsMenu();
         }
     };
 
-    public static PullRequestFragment newInstance(PullRequest pullRequest) {
+    public static PullRequestFragment newInstance(PullRequest pr, Issue issue) {
         PullRequestFragment f = new PullRequestFragment();
 
         Bundle args = new Bundle();
-        args.putSerializable("PULL", pullRequest);
+        args.putSerializable("PULL", pr);
+        args.putSerializable("ISSUE", issue);
         f.setArguments(args);
 
         return f;
@@ -157,6 +141,7 @@ public class PullRequestFragment extends ListDataBaseFragment<IssueEventHolder> 
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         mPullRequest = (PullRequest) getArguments().getSerializable("PULL");
+        mIssue = (Issue) getArguments().getSerializable("ISSUE");
 
         Repository repo = mPullRequest.getBase().getRepo();
         mRepoOwner = repo.getOwner().getLogin();
@@ -233,9 +218,6 @@ public class PullRequestFragment extends ListDataBaseFragment<IssueEventHolder> 
         mListHeaderView = inflater.inflate(R.layout.issue_comment_list_header,
                 getRecyclerView(), false);
         mAdapter.setHeaderView(mListHeaderView);
-        mEditButton = mListHeaderView.findViewById(R.id.iv_edit);
-        mEditButton.setOnClickListener(this);
-        updateEditButtonVisibility();
     }
 
     @Override
@@ -249,7 +231,6 @@ public class PullRequestFragment extends ListDataBaseFragment<IssueEventHolder> 
         super.onActivityCreated(savedInstanceState);
 
         getLoaderManager().initLoader(1, null, mCollaboratorCallback);
-        getLoaderManager().initLoader(2, null, mIssueCallback);
         loadStatusIfOpen();
     }
 
@@ -261,7 +242,7 @@ public class PullRequestFragment extends ListDataBaseFragment<IssueEventHolder> 
             fillLabels(new ArrayList<Label>());
             fillStatus(new ArrayList<CommitStatus>());
         }
-        hideContentAndRestartLoaders(1, 2, 3);
+        hideContentAndRestartLoaders(1, 2);
         super.onRefresh();
     }
 
@@ -353,7 +334,7 @@ public class PullRequestFragment extends ListDataBaseFragment<IssueEventHolder> 
 
     private void loadStatusIfOpen() {
         if (Constants.Issue.STATE_OPEN.equals(mPullRequest.getState())) {
-            getLoaderManager().initLoader(3, null, mStatusCallback);
+            getLoaderManager().initLoader(2, null, mStatusCallback);
         }
     }
 
@@ -362,11 +343,6 @@ public class PullRequestFragment extends ListDataBaseFragment<IssueEventHolder> 
             boolean locked = mPullRequest.isLocked() && !mIsCollaborator;
             mCommentFragment.setLocked(locked);
         }
-    }
-
-    private void updateEditButtonVisibility() {
-        mEditButton.setVisibility(mIsCollaborator && mIssue != null
-                ? View.VISIBLE : View.INVISIBLE);
     }
 
     private void fillData() {
@@ -530,18 +506,10 @@ public class PullRequestFragment extends ListDataBaseFragment<IssueEventHolder> 
 
     @Override
     public void onClick(View v) {
-        if (v.getId() == R.id.iv_edit) {
-            Intent editIntent = new Intent(getActivity(), IssueEditActivity.class);
-            editIntent.putExtra(Constants.Repository.OWNER, mRepoOwner);
-            editIntent.putExtra(Constants.Repository.NAME, mRepoName);
-            editIntent.putExtra(IssueEditActivity.EXTRA_ISSUE, mIssue);
-            startActivityForResult(editIntent, REQUEST_EDIT_ISSUE);
-        } else if (v.getTag() instanceof User) {
-            User user = (User) v.getTag();
-            Intent intent = IntentUtils.getUserActivityIntent(getActivity(), user);
-            if (intent != null) {
-                startActivity(intent);
-            }
+        User user = (User) v.getTag();
+        Intent intent = IntentUtils.getUserActivityIntent(getActivity(), user);
+        if (intent != null) {
+            startActivity(intent);
         }
     }
 
@@ -558,13 +526,6 @@ public class PullRequestFragment extends ListDataBaseFragment<IssueEventHolder> 
                 refreshComments();
                 getActivity().setResult(Activity.RESULT_OK);
             }
-        } else if (requestCode == REQUEST_EDIT_ISSUE) {
-            if (resultCode == Activity.RESULT_OK) {
-                BaseActivity activity = (BaseActivity) getActivity();
-                activity.setResult(Activity.RESULT_OK);
-                activity.onRefresh();
-            }
-
         } else {
             super.onActivityResult(requestCode, resultCode, data);
         }
