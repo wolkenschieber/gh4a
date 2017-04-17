@@ -1,12 +1,17 @@
 package com.gh4a.widget;
 
 import android.content.Context;
+import android.content.DialogInterface;
 import android.os.AsyncTask;
 import android.os.Parcelable;
+import android.support.annotation.IdRes;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.widget.ListPopupWindow;
 import android.text.TextUtils;
 import android.util.AttributeSet;
+import android.util.SparseIntArray;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -16,6 +21,8 @@ import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.TextView;
 
+import com.gh4a.DefaultClient;
+import com.gh4a.Gh4Application;
 import com.gh4a.R;
 import com.gh4a.activities.UserActivity;
 import com.gh4a.utils.ApiHelpers;
@@ -25,8 +32,11 @@ import com.gh4a.utils.UiUtils;
 import org.eclipse.egit.github.core.Reaction;
 import org.eclipse.egit.github.core.Reactions;
 import org.eclipse.egit.github.core.User;
+import org.eclipse.egit.github.core.client.GitHubClient;
+import org.eclipse.egit.github.core.service.ReactionService;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -34,7 +44,9 @@ import java.util.List;
 
 public class ReactionBar extends LinearLayout implements PopupWindow.OnDismissListener {
     public interface ReactionDetailsProvider {
-        List<Reaction> loadReactionDetailsInBackground(ReactionBar view) throws IOException;
+        List<Reaction> loadReactionDetailsInBackground(Object item) throws IOException;
+        void addReactionInBackground(GitHubClient client,
+                Object item, String content) throws IOException;
     }
 
     private TextView mPlusOneView;
@@ -45,6 +57,7 @@ public class ReactionBar extends LinearLayout implements PopupWindow.OnDismissLi
     private TextView mHeartView;
 
     private ReactionDetailsProvider mProvider;
+    private Object mReferenceItem;
     private ListPopupWindow mPopup;
     private long mLastPopupDismissTime;
 
@@ -86,8 +99,9 @@ public class ReactionBar extends LinearLayout implements PopupWindow.OnDismissLi
         }
     }
 
-    public void setReactionDetailsProvider(ReactionDetailsProvider provider) {
+    public void setReactionDetailsProvider(ReactionDetailsProvider provider, Object item) {
         mProvider = provider;
+        mReferenceItem = item;
         setClickable(provider != null);
     }
 
@@ -122,28 +136,7 @@ public class ReactionBar extends LinearLayout implements PopupWindow.OnDismissLi
         mPopup.setAdapter(adapter);
         mPopup.show();
 
-        new AsyncTask<Void, Void, List<Reaction>>() {
-            @Override
-            protected List<Reaction> doInBackground(Void... voids) {
-                try {
-                    List<Reaction> reactions =
-                            mProvider.loadReactionDetailsInBackground(ReactionBar.this);
-                    Collections.sort(reactions, new Comparator<Reaction>() {
-                        @Override
-                        public int compare(Reaction lhs, Reaction rhs) {
-                            int result = lhs.getContent().compareTo(rhs.getContent());
-                            if (result == 0) {
-                                result = rhs.getCreatedAt().compareTo(lhs.getCreatedAt());
-                            }
-                            return result;
-                        }
-                    });
-                    return reactions;
-                } catch (IOException e) {
-                    return null;
-                }
-            }
-
+        new FetchReactionTask(mProvider, mReferenceItem) {
             @Override
             protected void onPostExecute(List<Reaction> reactions) {
                 if (reactions != null) {
@@ -265,6 +258,147 @@ public class ReactionBar extends LinearLayout implements PopupWindow.OnDismissLi
             User user = (User) view.getTag();
             mParent.dismiss();
             mContext.startActivity(UserActivity.makeIntent(mContext, user));
+        }
+    }
+
+    private static class FetchReactionTask extends AsyncTask<Void, Void, List<Reaction>> {
+        private ReactionDetailsProvider mProvider;
+        private Object mItem;
+
+        public FetchReactionTask(ReactionDetailsProvider provider, Object item) {
+            mProvider = provider;
+            mItem = item;
+        }
+
+        @Override
+        protected List<Reaction> doInBackground(Void... voids) {
+            try {
+                List<Reaction> reactions =
+                        mProvider.loadReactionDetailsInBackground(mItem);
+                Collections.sort(reactions, new Comparator<Reaction>() {
+                    @Override
+                    public int compare(Reaction lhs, Reaction rhs) {
+                        int result = lhs.getContent().compareTo(rhs.getContent());
+                        if (result == 0) {
+                            result = rhs.getCreatedAt().compareTo(lhs.getCreatedAt());
+                        }
+                        return result;
+                    }
+                });
+                return reactions;
+            } catch (IOException e) {
+                return null;
+            }
+        }
+    }
+
+    public static class AddReactionDialog extends AlertDialog implements
+            DialogInterface.OnClickListener {
+        private View mContentView;
+        private ReactionDetailsProvider mProvider;
+        private SparseIntArray mOldReactionIds = new SparseIntArray();
+        private Object mItem;
+
+        private static final @IdRes int[] VIEW_IDS = {
+            R.id.plus_one, R.id.minus_one, R.id.laugh,
+            R.id.hooray, R.id.heart, R.id.confused
+        };
+        private static final String[] CONTENTS = {
+            Reaction.CONTENT_PLUS_ONE, Reaction.CONTENT_MINUS_ONE,
+            Reaction.CONTENT_LAUGH, Reaction.CONTENT_HOORAY,
+            Reaction.CONTENT_HEART, Reaction.CONTENT_CONFUSED
+        };
+
+        public AddReactionDialog(@NonNull Context context,
+                ReactionDetailsProvider provider, Object item) {
+            super(context);
+
+            mProvider = provider;
+            mItem = item;
+
+            mContentView = View.inflate(context, R.layout.add_reaction_dialog, null);
+            setView(mContentView);
+
+            setButton(BUTTON_POSITIVE, context.getString(R.string.save), this);
+            setButton(BUTTON_NEGATIVE, context.getString(R.string.cancel), this);
+        }
+
+        @Override
+        protected void onStart() {
+            super.onStart();
+
+            mContentView.findViewById(R.id.progress).setVisibility(View.VISIBLE);
+            mContentView.findViewById(R.id.action_container).setVisibility(View.GONE);
+
+            new FetchReactionTask(mProvider, mItem) {
+                @Override
+                protected void onPostExecute(List<Reaction> reactions) {
+                    if (reactions == null) {
+                        dismiss();
+                        return;
+                    }
+                    String ownLogin = Gh4Application.get().getAuthLogin();
+                    for (Reaction reaction : reactions) {
+                        if (!ApiHelpers.loginEquals(reaction.getUser(), ownLogin)) {
+                            continue;
+                        }
+                        for (int i = 0; i < CONTENTS.length; i++) {
+                            if (TextUtils.equals(CONTENTS[i], reaction.getContent())) {
+                                final @IdRes int resId = VIEW_IDS[i];
+                                ((CheckableImageView) mContentView.findViewById(resId)).setChecked(true);
+                                mOldReactionIds.put(resId, reaction.getId());
+                                break;
+                            }
+                        }
+                    }
+
+                    mContentView.findViewById(R.id.progress).setVisibility(View.GONE);
+                    mContentView.findViewById(R.id.action_container).setVisibility(View.VISIBLE);
+                }
+            }.execute();
+        }
+
+        @Override
+        public void onClick(DialogInterface dialog, int which) {
+            if (which != BUTTON_POSITIVE) {
+                return;
+            }
+
+            final List<String> reactionsToAdd = new ArrayList<>();
+            final List<Integer> reactionsToDelete = new ArrayList<>();
+
+            for (int i = 0; i < VIEW_IDS.length; i++) {
+                final @IdRes int resId = VIEW_IDS[i];
+                final int oldReactionId = mOldReactionIds.get(resId);
+                CheckableImageView view = (CheckableImageView) mContentView.findViewById(resId);
+                if (view.isChecked() && oldReactionId == 0) {
+                    reactionsToAdd.add(CONTENTS[i]);
+                } else if (!view.isChecked() && oldReactionId != 0) {
+                    reactionsToDelete.add(oldReactionId);
+                }
+            }
+
+            new AsyncTask<Void, Void, Void>() {
+                @Override
+                protected Void doInBackground(Void... voids) {
+                    try {
+                        GitHubClient client =
+                                new DefaultClient("application/vnd.github.squirrel-girl-preview");
+                        client.setOAuth2Token(Gh4Application.get().getAuthToken());
+
+                        for (String content : reactionsToAdd) {
+                            mProvider.addReactionInBackground(client, mItem, content);
+                        }
+                        ReactionService service = new ReactionService(client);
+                        for (int reactionId : reactionsToDelete) {
+                            service.deleteReaction(reactionId);
+                        }
+                    } catch (IOException e) {
+                        android.util.Log.d("foo", "save fail", e);
+                    }
+                    return null;
+                }
+            }.execute();
         }
     }
 }
