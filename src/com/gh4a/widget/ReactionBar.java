@@ -1,13 +1,21 @@
 package com.gh4a.widget;
 
 import android.content.Context;
-import android.content.DialogInterface;
+import android.content.res.ColorStateList;
+import android.graphics.Color;
+import android.graphics.PorterDuff;
+import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
 import android.os.Parcelable;
+import android.support.annotation.AttrRes;
+import android.support.annotation.ColorInt;
+import android.support.annotation.DrawableRes;
 import android.support.annotation.IdRes;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
-import android.support.v7.app.AlertDialog;
+import android.support.design.widget.BottomSheetDialog;
+import android.support.v4.content.ContextCompat;
+import android.support.v4.graphics.drawable.DrawableCompat;
 import android.support.v7.widget.ListPopupWindow;
 import android.text.TextUtils;
 import android.util.AttributeSet;
@@ -16,6 +24,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
+import android.widget.Checkable;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
@@ -292,8 +301,7 @@ public class ReactionBar extends LinearLayout implements PopupWindow.OnDismissLi
         }
     }
 
-    public static class AddReactionDialog extends AlertDialog implements
-            DialogInterface.OnClickListener {
+    public static class AddReactionDialog extends BottomSheetDialog implements View.OnClickListener {
         private View mContentView;
         private ReactionDetailsProvider mProvider;
         private SparseIntArray mOldReactionIds = new SparseIntArray();
@@ -302,6 +310,11 @@ public class ReactionBar extends LinearLayout implements PopupWindow.OnDismissLi
         private static final @IdRes int[] VIEW_IDS = {
             R.id.plus_one, R.id.minus_one, R.id.laugh,
             R.id.hooray, R.id.heart, R.id.confused
+        };
+        private static final @AttrRes  int[] ICON_IDS = {
+            R.attr.reactionPlusOneIcon, R.attr.reactionMinusOneIcon,
+            R.attr.reactionLaughIcon, R.attr.reactionHoorayIcon,
+            R.attr.reactionHeartIcon, R.attr.reactionConfusedIcon
         };
         private static final String[] CONTENTS = {
             Reaction.CONTENT_PLUS_ONE, Reaction.CONTENT_MINUS_ONE,
@@ -317,18 +330,38 @@ public class ReactionBar extends LinearLayout implements PopupWindow.OnDismissLi
             mItem = item;
 
             mContentView = View.inflate(context, R.layout.add_reaction_dialog, null);
-            setView(mContentView);
+            setContentView(mContentView);
 
-            setButton(BUTTON_POSITIVE, context.getString(R.string.save), this);
-            setButton(BUTTON_NEGATIVE, context.getString(R.string.cancel), this);
+            @ColorInt int bgColor = UiUtils.resolveColor(getContext(),
+                    android.R.attr.textColorSecondary);
+            @ColorInt int iconColor = UiUtils.resolveColor(getContext(),
+                    android.R.attr.textColorPrimaryInverse);
+
+            for (int i = 0; i < VIEW_IDS.length; i++) {
+                ImageView view = (ImageView) mContentView.findViewById(VIEW_IDS[i]);
+                Drawable icon = ContextCompat.getDrawable(getContext(),
+                        UiUtils.resolveDrawable(getContext(), ICON_IDS[i]));
+                Drawable bg = ContextCompat.getDrawable(getContext(),
+                        R.drawable.add_reaction_selector);
+                view.setBackground(
+                        wrapDrawableForCheckState(bg, bgColor, PorterDuff.Mode.SRC_IN));
+                view.setImageDrawable(
+                        wrapDrawableForCheckState(icon, iconColor, PorterDuff.Mode.SRC_ATOP));
+            }
         }
 
         @Override
         protected void onStart() {
             super.onStart();
 
-            mContentView.findViewById(R.id.progress).setVisibility(View.VISIBLE);
-            mContentView.findViewById(R.id.action_container).setVisibility(View.GONE);
+            final View progress = mContentView.findViewById(R.id.progress);
+            final View container = mContentView.findViewById(R.id.action_container);
+            final View saveButton = mContentView.findViewById(R.id.save_button);
+
+            progress.setVisibility(View.VISIBLE);
+            container.setVisibility(View.GONE);
+            saveButton.setVisibility(View.GONE);
+            saveButton.setOnClickListener(this);
 
             new FetchReactionTask(mProvider, mItem) {
                 @Override
@@ -345,35 +378,32 @@ public class ReactionBar extends LinearLayout implements PopupWindow.OnDismissLi
                         for (int i = 0; i < CONTENTS.length; i++) {
                             if (TextUtils.equals(CONTENTS[i], reaction.getContent())) {
                                 final @IdRes int resId = VIEW_IDS[i];
-                                ((CheckableImageView) mContentView.findViewById(resId)).setChecked(true);
+                                ((Checkable) mContentView.findViewById(resId)).setChecked(true);
                                 mOldReactionIds.put(resId, reaction.getId());
                                 break;
                             }
                         }
                     }
 
-                    mContentView.findViewById(R.id.progress).setVisibility(View.GONE);
-                    mContentView.findViewById(R.id.action_container).setVisibility(View.VISIBLE);
+                    progress.setVisibility(View.GONE);
+                    container.setVisibility(View.VISIBLE);
+                    saveButton.setVisibility(View.VISIBLE);
                 }
             }.execute();
         }
 
         @Override
-        public void onClick(DialogInterface dialog, int which) {
-            if (which != BUTTON_POSITIVE) {
-                return;
-            }
-
+        public void onClick(View view) {
             final List<String> reactionsToAdd = new ArrayList<>();
             final List<Integer> reactionsToDelete = new ArrayList<>();
 
             for (int i = 0; i < VIEW_IDS.length; i++) {
                 final @IdRes int resId = VIEW_IDS[i];
                 final int oldReactionId = mOldReactionIds.get(resId);
-                CheckableImageView view = (CheckableImageView) mContentView.findViewById(resId);
-                if (view.isChecked() && oldReactionId == 0) {
+                Checkable checkable = (Checkable) mContentView.findViewById(resId);
+                if (checkable.isChecked() && oldReactionId == 0) {
                     reactionsToAdd.add(CONTENTS[i]);
-                } else if (!view.isChecked() && oldReactionId != 0) {
+                } else if (!checkable.isChecked() && oldReactionId != 0) {
                     reactionsToDelete.add(oldReactionId);
                 }
             }
@@ -398,7 +428,28 @@ public class ReactionBar extends LinearLayout implements PopupWindow.OnDismissLi
                     }
                     return null;
                 }
+
+                @Override
+                protected void onPostExecute(Void aVoid) {
+                    dismiss();
+                }
             }.execute();
+        }
+
+        private Drawable wrapDrawableForCheckState(Drawable d, @ColorInt int checkedColor,
+                PorterDuff.Mode mode) {
+            ColorStateList tintList = new ColorStateList(new int[][] {
+                new int[] { android.R.attr.state_checked },
+                new int[] { }
+            }, new int[] {
+                checkedColor,
+                Color.TRANSPARENT
+            });
+
+            Drawable wrapped = DrawableCompat.wrap(d);
+            DrawableCompat.setTintList(wrapped, tintList);
+            DrawableCompat.setTintMode(wrapped, mode);
+            return wrapped;
         }
     }
 }
