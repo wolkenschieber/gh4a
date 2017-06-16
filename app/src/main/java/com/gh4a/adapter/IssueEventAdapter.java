@@ -23,6 +23,8 @@ import android.text.style.TypefaceSpan;
 import android.view.View;
 import android.widget.ImageView;
 
+import com.gh4a.DefaultClient;
+import com.gh4a.Gh4Application;
 import com.gh4a.R;
 import com.gh4a.activities.CommitActivity;
 import com.gh4a.activities.PullRequestDiffViewerActivity;
@@ -30,21 +32,29 @@ import com.gh4a.loader.IssueEventHolder;
 import com.gh4a.utils.ApiHelpers;
 import com.gh4a.utils.FileUtils;
 import com.gh4a.utils.HttpImageGetter;
+import com.gh4a.utils.IntentUtils;
 import com.gh4a.utils.StringUtils;
 import com.gh4a.utils.UiUtils;
 import com.gh4a.widget.IntentSpan;
 import com.gh4a.widget.IssueLabelSpan;
+import com.gh4a.widget.ReactionBar;
 import com.gh4a.widget.StyleableTextView;
 
 import org.eclipse.egit.github.core.CommitComment;
 import org.eclipse.egit.github.core.CommitFile;
 import org.eclipse.egit.github.core.IssueEvent;
 import org.eclipse.egit.github.core.Label;
+import org.eclipse.egit.github.core.Reaction;
+import org.eclipse.egit.github.core.Reactions;
 import org.eclipse.egit.github.core.Rename;
+import org.eclipse.egit.github.core.RepositoryId;
 import org.eclipse.egit.github.core.User;
+import org.eclipse.egit.github.core.service.IssueService;
 
+import java.io.IOException;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -143,7 +153,7 @@ public class IssueEventAdapter extends CommentAdapterBase<IssueEventHolder> {
                 final CommitFile file = item.file;
 
                 text.replace(pos, pos + 6, fileName);
-                if (file != null) {
+                if (file != null && file.getPatch() != null) {
                     text.setSpan(new IntentSpan(mContext) {
                         @Override
                         protected Intent getIntent() {
@@ -151,7 +161,8 @@ public class IssueEventAdapter extends CommentAdapterBase<IssueEventHolder> {
                                     mRepoOwner, mRepoName, mIssueId,
                                     commitComment.getCommitId(), commitComment.getPath(),
                                     file.getPatch(), null, commitComment.getPosition(),
-                                    -1, -1, false);
+                                    -1, -1, false,
+                                    new IntentUtils.InitialCommentMarker(commitComment.getId()));
                         }
                     }, pos, pos + fileName.length(), 0);
                 }
@@ -178,6 +189,11 @@ public class IssueEventAdapter extends CommentAdapterBase<IssueEventHolder> {
     }
 
     @Override
+    protected void bindReactions(IssueEventHolder item, ReactionBar view) {
+        view.setReactions(item.comment != null ? item.comment.getReactions() : null);
+    }
+
+    @Override
     protected boolean hasActionMenu(IssueEventHolder item) {
         return item.comment != null;
     }
@@ -185,6 +201,34 @@ public class IssueEventAdapter extends CommentAdapterBase<IssueEventHolder> {
     @Override
     protected boolean canQuote(IssueEventHolder item) {
         return item.comment != null && !mLocked;
+    }
+
+    @Override
+    protected boolean canReact(IssueEventHolder item) {
+        return item.comment != null;
+    }
+
+    @Override
+    public List<Reaction> loadReactionDetailsInBackground(ReactionBar.Item item) throws IOException {
+        ViewHolder<IssueEventHolder> holder = (ViewHolder) item;
+        IssueService service = (IssueService)
+                Gh4Application.get().getService(Gh4Application.ISSUE_SERVICE);
+        return service.getCommentReactions(new RepositoryId(mRepoOwner, mRepoName),
+                holder.mBoundItem.comment.getId());
+    }
+
+    @Override
+    public Reaction addReactionInBackground(ReactionBar.Item item, String content) throws IOException {
+        ViewHolder<IssueEventHolder> holder = (ViewHolder) item;
+        IssueService service = (IssueService)
+                Gh4Application.get().getService(Gh4Application.ISSUE_SERVICE);
+        return service.addCommentReaction(new RepositoryId(mRepoOwner, mRepoName),
+                holder.mBoundItem.comment.getId(), content);
+    }
+
+    @Override
+    protected void updateReactions(IssueEventHolder item, Reactions reactions) {
+        item.comment.setReactions(reactions);
     }
 
     private CharSequence formatEvent(final IssueEvent event, final User user, int typefaceValue,

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge  xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <com.gh4a.widget.StyleableTextView
+        android:id="@+id/plus_one"
+        style="@style/ReactionBarButton"
+        android:drawableLeft="?attr/reactionPlusOneIcon" />
+
+    <com.gh4a.widget.StyleableTextView
+        android:id="@+id/minus_one"
+        style="@style/ReactionBarButton"
+        android:drawableLeft="?attr/reactionMinusOneIcon" />
+
+    <com.gh4a.widget.StyleableTextView
+        android:id="@+id/laugh"
+        style="@style/ReactionBarButton"
+        android:drawableLeft="?attr/reactionLaughIcon" />
+
+    <com.gh4a.widget.StyleableTextView
+        android:id="@+id/hooray"
+        style="@style/ReactionBarButton"
+        android:drawableLeft="?attr/reactionHoorayIcon" />
+
+    <com.gh4a.widget.StyleableTextView
+        android:id="@+id/confused"
+        style="@style/ReactionBarButton"
+        android:drawableLeft="?attr/reactionConfusedIcon" />
+
+    <com.gh4a.widget.StyleableTextView
+        android:id="@+id/heart"
+        style="@style/ReactionBarButton"
+        android:drawableLeft="?attr/reactionHeartIcon" />
+
+    <ImageView
+        android:id="@+id/react"
+        style="@style/SelectableBorderlessItem"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical"
+        android:padding="8dp"
+        android:src="?attr/overflowIcon" />
+
+</merge>

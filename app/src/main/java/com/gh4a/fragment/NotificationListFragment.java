@@ -1,5 +1,6 @@
 package com.gh4a.fragment;
 
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.net.Uri;
@@ -46,7 +47,7 @@ public class NotificationListFragment extends LoadingListFragmentBase implements
             new LoaderCallbacks<NotificationListLoadResult>(this) {
         @Override
         protected Loader<LoaderResult<NotificationListLoadResult>> onCreateLoader() {
-            return new NotificationListLoader(getContext());
+            return new NotificationListLoader(getContext(), mAll, mParticipating);
         }
 
         @Override
@@ -58,12 +59,33 @@ public class NotificationListFragment extends LoadingListFragmentBase implements
             mAdapter.notifyDataSetChanged();
             updateEmptyState();
             updateMenuItemVisibility();
+            if (!mAll && !mParticipating) {
+                mCallback.setNotificationsIndicatorVisible(!result.notifications.isEmpty());
+            }
         }
     };
 
     private NotificationAdapter mAdapter;
     private Date mNotificationsLoadTime;
     private MenuItem mMarkAllAsReadMenuItem;
+    private ParentCallback mCallback;
+    private boolean mAll;
+    private boolean mParticipating;
+
+    public interface ParentCallback {
+        void setNotificationsIndicatorVisible(boolean visible);
+    }
+
+    @Override
+    public void onAttach(Context context) {
+        super.onAttach(context);
+
+        if (!(context instanceof ParentCallback)) {
+            throw new IllegalStateException("context must implement ParentCallback");
+        }
+
+        mCallback = (ParentCallback) context;
+    }
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -147,7 +169,8 @@ public class NotificationListFragment extends LoadingListFragmentBase implements
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
+        int itemId = item.getItemId();
+        switch (itemId) {
             case R.id.mark_all_as_read:
                 new AlertDialog.Builder(getActivity())
                         .setMessage(R.string.mark_all_as_read_question)
@@ -161,9 +184,28 @@ public class NotificationListFragment extends LoadingListFragmentBase implements
                         .setNegativeButton(R.string.cancel, null)
                         .show();
                 return true;
+            case R.id.notification_filter_unread:
+            case R.id.notification_filter_all:
+            case R.id.notification_filter_participating:
+                mAll = itemId == R.id.notification_filter_all;
+                mParticipating = itemId == R.id.notification_filter_participating;
+                item.setChecked(true);
+                reloadNotification();
+                return true;
         }
 
         return super.onOptionsItemSelected(item);
+    }
+
+    private void reloadNotification() {
+        if (mAdapter != null) {
+            mAdapter.clear();
+        }
+        setContentShown(false);
+        updateMenuItemVisibility();
+
+        getLoaderManager().destroyLoader(0);
+        getLoaderManager().initLoader(0, null, mNotificationsCallback);
     }
 
     @Override
@@ -201,7 +243,16 @@ public class NotificationListFragment extends LoadingListFragmentBase implements
             return;
         }
 
-        mMarkAllAsReadMenuItem.setVisible(isContentShown() && mAdapter.getCount() > 0);
+        mMarkAllAsReadMenuItem.setVisible(isContentShown() && mAdapter.hasUnreadNotifications());
+    }
+
+    private void markAsRead(Repository repository, Notification notification) {
+        if (mAdapter.markAsRead(repository, notification)) {
+            if (!mAll && !mParticipating) {
+                mCallback.setNotificationsIndicatorVisible(false);
+            }
+        }
+        updateMenuItemVisibility();
     }
 
     private class MarkReadTask extends BackgroundTask<Void> {
@@ -234,7 +285,7 @@ public class NotificationListFragment extends LoadingListFragmentBase implements
 
         @Override
         protected void onSuccess(Void result) {
-            mAdapter.markAsRead(mRepository, mNotification);
+            markAsRead(mRepository, mNotification);
         }
     }
 
@@ -257,7 +308,7 @@ public class NotificationListFragment extends LoadingListFragmentBase implements
 
         @Override
         protected void onSuccess(Void result) {
-            mAdapter.markAsRead(null, mNotification);
+            markAsRead(null, mNotification);
         }
     }
 }

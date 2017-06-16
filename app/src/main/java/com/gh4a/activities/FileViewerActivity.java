@@ -26,6 +26,7 @@ import android.support.v4.content.Loader;
 import android.support.v4.print.PrintHelper;
 import android.support.v4.view.MenuItemCompat;
 import android.support.v7.app.ActionBar;
+import android.support.v7.widget.PopupMenu;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -37,31 +38,46 @@ import com.gh4a.loader.LoaderCallbacks;
 import com.gh4a.loader.LoaderResult;
 import com.gh4a.utils.FileUtils;
 import com.gh4a.utils.IntentUtils;
+import com.gh4a.utils.StringUtils;
 
 import org.eclipse.egit.github.core.FieldError;
 import org.eclipse.egit.github.core.RepositoryContents;
 import org.eclipse.egit.github.core.RequestError;
+import org.eclipse.egit.github.core.TextMatch;
 import org.eclipse.egit.github.core.client.RequestException;
 import org.eclipse.egit.github.core.util.EncodingUtils;
 
 import java.util.List;
 import java.util.Locale;
 
-public class FileViewerActivity extends WebViewerActivity {
+public class FileViewerActivity extends WebViewerActivity
+        implements PopupMenu.OnMenuItemClickListener {
     public static Intent makeIntent(Context context, String repoOwner, String repoName,
             String ref, String fullPath) {
-        return makeIntentWithHighlight(context, repoOwner, repoName, ref, fullPath, -1, -1);
+        return makeIntent(context, repoOwner, repoName, ref, fullPath, -1, -1, null);
     }
 
     public static Intent makeIntentWithHighlight(Context context, String repoOwner, String repoName,
             String ref, String fullPath, int highlightStart, int highlightEnd) {
+        return makeIntent(context, repoOwner, repoName, ref, fullPath, highlightStart, highlightEnd,
+                null);
+    }
+
+    public static Intent makeIntentWithSearchMatch(Context context, String repoOwner,
+            String repoName, String ref, String fullPath, TextMatch textMatch) {
+        return makeIntent(context, repoOwner, repoName, ref, fullPath, -1, -1, textMatch);
+    }
+
+    public static Intent makeIntent(Context context, String repoOwner, String repoName, String ref,
+            String fullPath, int highlightStart, int highlightEnd, TextMatch textMatch) {
         return new Intent(context, FileViewerActivity.class)
                 .putExtra("owner", repoOwner)
                 .putExtra("repo", repoName)
                 .putExtra("path", fullPath)
                 .putExtra("ref", ref)
                 .putExtra("highlight_start", highlightStart)
-                .putExtra("highlight_end", highlightEnd);
+                .putExtra("highlight_end", highlightEnd)
+                .putExtra("text_match", textMatch);
     }
 
     private String mRepoName;
@@ -70,7 +86,9 @@ public class FileViewerActivity extends WebViewerActivity {
     private String mRef;
     private int mHighlightStart;
     private int mHighlightEnd;
+    private TextMatch mTextMatch;
     private RepositoryContents mContent;
+    private int mLastTouchedLine = 0;
 
     private static final int MENU_ITEM_HISTORY = 10;
     private static final String RAW_URL_FORMAT = "https://raw.githubusercontent.com/%s/%s/%s/%s";
@@ -138,6 +156,7 @@ public class FileViewerActivity extends WebViewerActivity {
         mRef = extras.getString("ref");
         mHighlightStart = extras.getInt("highlight_start", -1);
         mHighlightEnd = extras.getInt("highlight_end", -1);
+        mTextMatch = (TextMatch) extras.getSerializable("text_match");
     }
 
     @Override
@@ -165,8 +184,21 @@ public class FileViewerActivity extends WebViewerActivity {
                     mRepoOwner, mRepoName, mRef, cssTheme, addTitleHeader);
         } else {
             String data = base64Data != null ? new String(EncodingUtils.fromBase64(base64Data)) : "";
+            findMatchingLines(data);
             return generateCodeHtml(data, mPath,
                     mHighlightStart, mHighlightEnd, cssTheme, addTitleHeader);
+        }
+    }
+
+    private void findMatchingLines(String data) {
+        if (mTextMatch == null) {
+            return;
+        }
+
+        int[] matchingLines = StringUtils.findMatchingLines(data, mTextMatch.getFragment());
+        if (matchingLines != null) {
+            mHighlightStart = matchingLines[0];
+            mHighlightEnd = matchingLines[1];
         }
     }
 
@@ -219,13 +251,8 @@ public class FileViewerActivity extends WebViewerActivity {
                 IntentUtils.launchBrowser(this, Uri.parse(url));
                 return true;
             case R.id.share:
-                Intent shareIntent = new Intent(Intent.ACTION_SEND);
-                shareIntent.setType("text/plain");
-                shareIntent.putExtra(Intent.EXTRA_SUBJECT, getString(R.string.share_file_subject,
-                        FileUtils.getFileName(mPath), mRepoOwner + "/" + mRepoName));
-                shareIntent.putExtra(Intent.EXTRA_TEXT, url);
-                shareIntent = Intent.createChooser(shareIntent, getString(R.string.share_title));
-                startActivity(shareIntent);
+                IntentUtils.share(this, getString(R.string.share_file_subject,
+                        FileUtils.getFileName(mPath), mRepoOwner + "/" + mRepoName), url);
                 return true;
             case MENU_ITEM_HISTORY:
                 startActivity(CommitHistoryActivity.makeIntent(this,
@@ -238,6 +265,39 @@ public class FileViewerActivity extends WebViewerActivity {
     @Override
     protected Intent navigateUp() {
         return RepositoryActivity.makeIntent(this, mRepoOwner, mRepoName);
+    }
+
+    @Override
+    public boolean onMenuItemClick(MenuItem item) {
+        switch (item.getItemId()) {
+            case R.id.share:
+                if (mLastTouchedLine > 0) {
+                    String subject = getString(R.string.share_line_subject, mLastTouchedLine, mPath,
+                            mRepoOwner + "/" + mRepoName);
+                    IntentUtils.share(this, subject, createUrl());
+                }
+                return true;
+        }
+        return false;
+    }
+
+    @Override
+    protected void onLineTouched(int line, int x, int y) {
+        super.onLineTouched(line, x, y);
+
+        mLastTouchedLine = line;
+
+        View anchor = findViewById(R.id.popup_helper);
+        anchor.layout(x, y, x + 1, y + 1);
+        PopupMenu popupMenu = new PopupMenu(this, anchor);
+        popupMenu.getMenuInflater().inflate(R.menu.file_line_menu, popupMenu.getMenu());
+        popupMenu.show();
+        popupMenu.setOnMenuItemClickListener(this);
+    }
+
+    private String createUrl() {
+        return "https://github.com/" + mRepoOwner + "/" + mRepoName + "/blob/" + mRef + "/" +
+                mPath + "#L" + mLastTouchedLine;
     }
 
     private void openUnsuitableFileAndFinish() {

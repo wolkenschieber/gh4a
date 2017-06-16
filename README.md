@@ -85,6 +85,7 @@ Open Source Libraries
 ---------------------
 * [android-gif-drawable](https://github.com/koral--/android-gif-drawable)
 * [AndroidSVG](https://github.com/BigBadaboom/androidsvg)
+* [emoji-java](https://github.com/vdurmont/emoji-java)
 * [HoloColorPicker](https://github.com/LarsWerkman/HoloColorPicker)
 * [Material Design Icons](https://github.com/google/material-design-icons)
 * [SmoothProgressBar](https://github.com/castorflex/SmoothProgressBar)
@@ -97,3 +98,4 @@ Contributions
 * [extremis (Steven Mautone)](https://github.com/extremis) - OctoDroid name and the new icon
 * [zquestz](https://github.com/zquestz) - Thanks for the application icon
 * [cketti](https://github.com/cketti)
+* [Tunous](https://github.com/Tunous) - Improvements, bug fixes and new features

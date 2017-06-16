@@ -23,6 +23,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.res.AssetManager;
+import android.graphics.Point;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -35,6 +36,8 @@ import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.MotionEvent;
+import android.view.View;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -53,12 +56,17 @@ import java.io.IOException;
 import java.util.ArrayList;
 
 public abstract class WebViewerActivity extends BaseActivity implements
-        SwipeRefreshLayout.ChildScrollDelegate {
-    protected WebView mWebView;
+        SwipeRefreshLayout.ChildScrollDelegate, View.OnTouchListener {
+
+    protected final Point mLastTouchDown = new Point();
+
+    private WebView mWebView;
     private WebView mPrintWebView;
     private boolean mStarted;
     private boolean mHasData;
     private boolean mRequiresJsInterface;
+    private boolean mPageFinished;
+    private boolean mRenderingDone;
     private final Handler mHandler = new Handler();
 
     private static final String DARK_CSS_THEME = "dark";
@@ -72,21 +80,35 @@ public abstract class WebViewerActivity extends BaseActivity implements
     };
 
     @SuppressWarnings("unused")
-    private class RenderingDoneInterface {
+    private class DisplayJavascriptInterface {
+        @JavascriptInterface
+        public void onLineTouched(final int line) {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    WebViewerActivity.this.onLineTouched(line, mLastTouchDown.x, mLastTouchDown.y);
+                }
+            });
+        }
+
         @JavascriptInterface
         public void onRenderingDone() {
             mHandler.post(new Runnable() {
                 @Override
                 public void run() {
-                    applyLineWrapping(shouldWrapLines());
-                    setContentShown(true);
+                    mRenderingDone = true;
+                    showContentIfDone();
                 }
             });
         }
     }
 
     @SuppressWarnings("unused")
-    private class PrintRenderingDoneInterface {
+    private class PrintJavascriptInterface {
+        @JavascriptInterface
+        public void onLineTouched(int line) {
+        }
+
         @JavascriptInterface
         public void onRenderingDone() {
             mHandler.post(new Runnable() {
@@ -102,10 +124,8 @@ public abstract class WebViewerActivity extends BaseActivity implements
     private final WebViewClient mWebViewClient = new WebViewClient() {
         @Override
         public void onPageFinished(WebView view, String url) {
-            if (!mRequiresJsInterface) {
-                applyLineWrapping(shouldWrapLines());
-                setContentShown(true);
-            }
+            mPageFinished = true;
+            showContentIfDone();
         }
 
         @Override
@@ -178,6 +198,8 @@ public abstract class WebViewerActivity extends BaseActivity implements
 
         mWebView.setBackgroundColor(UiUtils.resolveColor(this, R.attr.colorWebViewBackground));
         mWebView.setWebViewClient(mWebViewClient);
+
+        mWebView.setOnTouchListener(this);
     }
 
     @SuppressWarnings("deprecation")
@@ -238,6 +260,14 @@ public abstract class WebViewerActivity extends BaseActivity implements
         return super.onOptionsItemSelected(item);
     }
 
+    @Override
+    public boolean onTouch(View view, MotionEvent event) {
+        if (event.getAction() == MotionEvent.ACTION_DOWN) {
+            mLastTouchDown.set((int) event.getX(), (int) event.getY());
+        }
+        return false;
+    }
+
     @SuppressWarnings("deprecation")
     @TargetApi(11)
     private void doSearch() {
@@ -257,7 +287,7 @@ public abstract class WebViewerActivity extends BaseActivity implements
         initWebViewSettings(mPrintWebView.getSettings());
 
         if (mRequiresJsInterface) {
-            mPrintWebView.addJavascriptInterface(new PrintRenderingDoneInterface(), "NativeClient");
+            mPrintWebView.addJavascriptInterface(new PrintJavascriptInterface(), "NativeClient");
         } else {
             mPrintWebView.setWebViewClient(new WebViewClient() {
                 @Override
@@ -296,7 +326,16 @@ public abstract class WebViewerActivity extends BaseActivity implements
         super.setContentShown(shown);
         if (!shown) {
             mHasData = false;
+            mRenderingDone = false;
+            mPageFinished = false;
             supportInvalidateOptionsMenu();
+        }
+    }
+
+    private void showContentIfDone() {
+        if (mPageFinished && (mRenderingDone || !mRequiresJsInterface)) {
+            applyLineWrapping(shouldWrapLines());
+            setContentShown(true);
         }
     }
 
@@ -326,13 +365,16 @@ public abstract class WebViewerActivity extends BaseActivity implements
         }
     }
 
+    protected void onLineTouched(int line, int x, int y) {
+    }
+
     @SuppressLint("AddJavascriptInterface")
     protected void onDataReady() {
         final String cssTheme = Gh4Application.THEME == R.style.DarkTheme
                 ? DARK_CSS_THEME : LIGHT_CSS_THEME;
         final String html = generateHtml(cssTheme, false);
         if (mRequiresJsInterface) {
-            mWebView.addJavascriptInterface(new RenderingDoneInterface(), "NativeClient");
+            mWebView.addJavascriptInterface(new DisplayJavascriptInterface(), "NativeClient");
         }
         mWebView.loadDataWithBaseURL("file:///android_asset/", html, null, "utf-8", null);
         mHasData = true;
@@ -426,7 +468,7 @@ public abstract class WebViewerActivity extends BaseActivity implements
         content.append("</head>");
         content.append("<body onload='prettyPrint(function() { highlightLines(");
         content.append(highlightStart).append(",").append(highlightEnd).append("); ");
-        content.append("NativeClient.onRenderingDone(); })'");
+        content.append("addClickListeners(); NativeClient.onRenderingDone(); })'");
         content.append(" onresize='scrollToHighlight();'>");
         if (title != null) {
             content.append("<h2>").append(title).append("</h2>");

@@ -24,8 +24,11 @@ import com.gh4a.Gh4Application;
 import com.gh4a.loader.LoaderResult;
 import com.gh4a.loader.PullRequestCommentsLoader;
 import com.gh4a.utils.ApiHelpers;
+import com.gh4a.utils.IntentUtils;
+import com.gh4a.widget.ReactionBar;
 
 import org.eclipse.egit.github.core.CommitComment;
+import org.eclipse.egit.github.core.Reaction;
 import org.eclipse.egit.github.core.RepositoryId;
 import org.eclipse.egit.github.core.service.PullRequestService;
 
@@ -34,14 +37,14 @@ import java.util.List;
 
 public class PullRequestDiffViewerActivity extends DiffViewerActivity {
     public static Intent makeIntent(Context context, String repoOwner, String repoName, int number,
-                String commitSha, String path, String diff,
-                List<CommitComment> comments, int initialLine,
-                int highlightStartLine, int highlightEndLine, boolean highlightIsRight) {
+            String commitSha, String path, String diff, List<CommitComment> comments,
+            int initialLine, int highlightStartLine, int highlightEndLine, boolean highlightIsRight,
+            IntentUtils.InitialCommentMarker initialComment) {
         Intent intent = new Intent(context, PullRequestDiffViewerActivity.class)
                 .putExtra("number", number);
         return DiffViewerActivity.fillInIntent(intent, repoOwner, repoName, commitSha, path,
                 diff, comments, initialLine, highlightStartLine, highlightEndLine,
-                highlightIsRight, null);
+                highlightIsRight, initialComment);
     }
 
     private int mPullRequestNumber;
@@ -58,9 +61,15 @@ public class PullRequestDiffViewerActivity extends DiffViewerActivity {
     }
 
     @Override
-    protected String createUrl() {
-        return "https://github.com/" + mRepoOwner + "/" + mRepoName + "/pull/" + mPullRequestNumber
-                + "/files#diff-" + ApiHelpers.md5(mPath);
+    protected String createUrl(String lineId, long replyId) {
+        String link = "https://github.com/" + mRepoOwner + "/" + mRepoName + "/pull/"
+                + mPullRequestNumber + "/files";
+        if (replyId > 0L) {
+            link += "#r" + replyId;
+        } else {
+            link += "#diff-" + ApiHelpers.md5(mPath) + lineId;
+        }
+        return link;
     }
 
     @Override
@@ -104,5 +113,27 @@ public class PullRequestDiffViewerActivity extends DiffViewerActivity {
                 app.getService(Gh4Application.PULL_SERVICE);
 
         pullRequestService.deleteComment(new RepositoryId(mRepoOwner, mRepoName), id);
+    }
+
+    @Override
+    public List<Reaction> loadReactionDetailsInBackground(ReactionBar.Item item) throws IOException {
+        CommitCommentWrapper comment = (CommitCommentWrapper) item;
+        Gh4Application app = Gh4Application.get();
+        PullRequestService pullRequestService = (PullRequestService)
+                app.getService(Gh4Application.PULL_SERVICE);
+
+        return pullRequestService.getCommentReactions(new RepositoryId(mRepoOwner, mRepoName),
+                comment.comment.getId());
+    }
+
+    @Override
+    public Reaction addReactionInBackground(ReactionBar.Item item, String content) throws IOException {
+        CommitCommentWrapper comment = (CommitCommentWrapper) item;
+        Gh4Application app = Gh4Application.get();
+        PullRequestService pullRequestService = (PullRequestService)
+                app.getService(Gh4Application.PULL_SERVICE);
+
+        return pullRequestService.addCommentReaction(new RepositoryId(mRepoOwner, mRepoName),
+                comment.comment.getId(), content);
     }
 }

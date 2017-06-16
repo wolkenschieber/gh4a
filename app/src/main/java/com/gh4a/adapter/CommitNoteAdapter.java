@@ -22,15 +22,23 @@ import android.text.style.StyleSpan;
 import android.view.View;
 import android.widget.ImageView;
 
+import com.gh4a.Gh4Application;
 import com.gh4a.R;
 import com.gh4a.utils.ApiHelpers;
 import com.gh4a.utils.HttpImageGetter;
+import com.gh4a.widget.ReactionBar;
 import com.gh4a.widget.StyleableTextView;
 
 import org.eclipse.egit.github.core.CommitComment;
+import org.eclipse.egit.github.core.Reaction;
+import org.eclipse.egit.github.core.Reactions;
+import org.eclipse.egit.github.core.RepositoryId;
 import org.eclipse.egit.github.core.User;
+import org.eclipse.egit.github.core.service.CommitService;
 
+import java.io.IOException;
 import java.util.Date;
+import java.util.List;
 
 public class CommitNoteAdapter extends CommentAdapterBase<CommitComment> {
     public CommitNoteAdapter(Context context, String repoOwner, String repoName,
@@ -89,6 +97,11 @@ public class CommitNoteAdapter extends CommentAdapterBase<CommitComment> {
     }
 
     @Override
+    protected void bindReactions(CommitComment item, ReactionBar view) {
+        view.setReactions(item.getReactions());
+    }
+
+    @Override
     protected boolean hasActionMenu(CommitComment item) {
         return true;
     }
@@ -96,5 +109,31 @@ public class CommitNoteAdapter extends CommentAdapterBase<CommitComment> {
     @Override
     protected boolean canQuote(CommitComment item) {
         return true;
+    }
+
+    @Override
+    protected boolean canReact(CommitComment item) {
+        return true;
+    }
+
+    @Override
+    public List<Reaction> loadReactionDetailsInBackground(ReactionBar.Item item) throws IOException {
+        CommitComment comment = (CommitComment) item;
+        CommitService service = (CommitService)
+                Gh4Application.get().getService(Gh4Application.COMMIT_SERVICE);
+        return service.getCommentReactions(new RepositoryId(mRepoOwner, mRepoName), comment.getId());
+    }
+
+    @Override
+    public Reaction addReactionInBackground(ReactionBar.Item item, String content) throws IOException {
+        CommitComment comment = (CommitComment) item;
+        CommitService service = (CommitService)
+                Gh4Application.get().getService(Gh4Application.COMMIT_SERVICE);
+        return service.addCommentReaction(new RepositoryId(mRepoOwner, mRepoName), comment.getId(), content);
+    }
+
+    @Override
+    protected void updateReactions(CommitComment item, Reactions reactions) {
+        item.setReactions(reactions);
     }
 }

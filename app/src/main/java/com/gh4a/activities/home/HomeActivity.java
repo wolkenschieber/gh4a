@@ -3,13 +3,19 @@ package com.gh4a.activities.home;
 import android.app.Dialog;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.support.annotation.ColorInt;
+import android.support.annotation.ColorRes;
 import android.support.annotation.NonNull;
 import android.support.v4.app.DialogFragment;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
+import android.support.v4.content.ContextCompat;
 import android.support.v4.content.Loader;
+import android.support.v4.graphics.drawable.DrawableCompat;
+import android.support.v4.view.MenuItemCompat;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.AlertDialog;
 import android.text.TextUtils;
@@ -26,19 +32,23 @@ import com.gh4a.R;
 import com.gh4a.activities.Github4AndroidActivity;
 import com.gh4a.activities.SettingsActivity;
 import com.gh4a.activities.UserActivity;
+import com.gh4a.fragment.NotificationListFragment;
 import com.gh4a.fragment.RepositoryListContainerFragment;
 import com.gh4a.fragment.SettingsFragment;
+import com.gh4a.loader.HasNotificationsLoader;
 import com.gh4a.loader.LoaderCallbacks;
 import com.gh4a.loader.LoaderResult;
 import com.gh4a.loader.UserLoader;
 import com.gh4a.utils.ApiHelpers;
 import com.gh4a.utils.AvatarHandler;
 import com.gh4a.utils.IntentUtils;
+import com.gh4a.utils.UiUtils;
 
 import org.eclipse.egit.github.core.User;
 
 public class HomeActivity extends BasePagerActivity implements
-        View.OnClickListener, RepositoryListContainerFragment.Callback {
+        View.OnClickListener, RepositoryListContainerFragment.Callback,
+        NotificationListFragment.ParentCallback {
     private static final int REQUEST_SETTINGS = 10000;
 
     private FragmentFactory mFactory;
@@ -50,6 +60,9 @@ public class HomeActivity extends BasePagerActivity implements
     private int mSelectedFactoryId;
     private boolean mDrawerInAccountMode;
     private Menu mLeftDrawerMenu;
+    private ImageView mNotificationsIndicator;
+    private MenuItem mNotificationsMenuItem;
+    private Drawable mNotificationsIndicatorIcon;
 
     private static final String STATE_KEY_FACTORY_ITEM = "factoryItem";
 
@@ -83,6 +96,17 @@ public class HomeActivity extends BasePagerActivity implements
         }
     };
 
+    private final LoaderCallbacks<Boolean> mHasNotificationsCallback = new LoaderCallbacks<Boolean>(this) {
+        @Override
+        protected Loader<LoaderResult<Boolean>> onCreateLoader() {
+            return new HasNotificationsLoader(HomeActivity.this);
+        }
+        @Override
+        protected void onResultReady(Boolean result) {
+            setNotificationsIndicatorVisible(result);
+        }
+    };
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         mUserLogin = Gh4Application.get().getAuthLogin();
@@ -93,6 +117,9 @@ public class HomeActivity extends BasePagerActivity implements
         }
         mFactory = getFactoryForItem(mSelectedFactoryId);
 
+        mNotificationsIndicatorIcon =
+                DrawableCompat.wrap(ContextCompat.getDrawable(this, R.drawable.circle).mutate());
+
         super.onCreate(savedInstanceState);
 
         ActionBar actionBar = getSupportActionBar();
@@ -102,6 +129,28 @@ public class HomeActivity extends BasePagerActivity implements
         actionBar.setTitle(mFactory.getTitleResId());
 
         getSupportLoaderManager().initLoader(0, null, mUserCallback);
+        getSupportLoaderManager().initLoader(1, null, mHasNotificationsCallback);
+    }
+
+    private void updateNotificationIndicator(int checkedItemId) {
+        if (mNotificationsIndicator == null) {
+            return;
+        }
+
+        @ColorRes  int colorResId = checkedItemId == R.id.notifications
+                ? R.attr.colorAccent : android.R.attr.textColorPrimary;
+        @ColorInt int tint = UiUtils.resolveColor(this, colorResId);
+        DrawableCompat.setTint(mNotificationsIndicatorIcon, tint);
+        mNotificationsIndicator.setImageDrawable(mNotificationsIndicatorIcon);
+    }
+
+    public void setNotificationsIndicatorVisible(boolean visible) {
+        if (mNotificationsIndicator != null) {
+            mNotificationsIndicator.setVisibility(visible ? View.VISIBLE : View.GONE);
+            mNotificationsMenuItem.setIcon(visible
+                    ? R.drawable.icon_notifications_unread
+                    : R.drawable.icon_notifications);
+        }
     }
 
     @Override
@@ -132,6 +181,15 @@ public class HomeActivity extends BasePagerActivity implements
     @Override
     protected int getInitialLeftDrawerSelection(Menu menu) {
         mLeftDrawerMenu = menu;
+
+        mNotificationsMenuItem = menu.findItem(R.id.notifications);
+        if (mNotificationsMenuItem != null) {
+            View actionView = MenuItemCompat.getActionView(mNotificationsMenuItem);
+            mNotificationsIndicator =
+                    (ImageView) actionView.findViewById(R.id.notifications_indicator);
+            updateNotificationIndicator(mSelectedFactoryId);
+        }
+
         return mSelectedFactoryId;
     }
 
@@ -175,6 +233,8 @@ public class HomeActivity extends BasePagerActivity implements
     @Override
     public boolean onNavigationItemSelected(MenuItem item) {
         super.onNavigationItemSelected(item);
+
+        updateNotificationIndicator(item.getItemId());
 
         if (mFactory != null && mFactory.onDrawerItemSelected(item)) {
             return true;
@@ -320,7 +380,7 @@ public class HomeActivity extends BasePagerActivity implements
 
     @Override
     public void onRefresh() {
-        forceLoaderReload(0);
+        forceLoaderReload(0, 1);
         mFactory.onRefresh();
         super.onRefresh();
     }

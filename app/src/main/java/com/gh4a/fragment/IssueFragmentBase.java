@@ -26,6 +26,9 @@ import android.support.v7.widget.RecyclerView;
 import android.text.SpannableString;
 import android.text.style.StyleSpan;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -46,10 +49,13 @@ import com.gh4a.utils.HttpImageGetter;
 import com.gh4a.utils.IntentUtils;
 import com.gh4a.utils.StringUtils;
 import com.gh4a.utils.UiUtils;
+import com.gh4a.widget.ReactionBar;
 
 import org.eclipse.egit.github.core.Comment;
 import org.eclipse.egit.github.core.Issue;
 import org.eclipse.egit.github.core.Label;
+import org.eclipse.egit.github.core.Reaction;
+import org.eclipse.egit.github.core.Reactions;
 import org.eclipse.egit.github.core.RepositoryId;
 import org.eclipse.egit.github.core.User;
 import org.eclipse.egit.github.core.service.IssueService;
@@ -59,7 +65,9 @@ import java.util.List;
 import java.util.Set;
 
 public abstract class IssueFragmentBase extends ListDataBaseFragment<IssueEventHolder> implements
-        View.OnClickListener, IssueEventAdapter.OnCommentAction<IssueEventHolder>,
+        View.OnClickListener, ReactionBar.Callback, ReactionBar.Item,
+        ReactionBar.ReactionDetailsCache.Listener,
+        IssueEventAdapter.OnCommentAction<IssueEventHolder>,
         CommentBoxFragment.Callback {
     protected static final int REQUEST_EDIT = 1000;
 
@@ -71,6 +79,9 @@ public abstract class IssueFragmentBase extends ListDataBaseFragment<IssueEventH
     private boolean mIsCollaborator;
     private boolean mListShown;
     private CommentBoxFragment mCommentFragment;
+    private ReactionBar.AddReactionMenuHelper mReactionMenuHelper;
+    private ReactionBar.ReactionDetailsCache mReactionDetailsCache =
+            new ReactionBar.ReactionDetailsCache(this);
     private IssueEventAdapter mAdapter;
     private HttpImageGetter mImageGetter;
 
@@ -97,6 +108,7 @@ public abstract class IssueFragmentBase extends ListDataBaseFragment<IssueEventH
         mInitialComment = args.getParcelable("initial_comment");
         args.remove("initial_comment");
 
+        setHasOptionsMenu(true);
         updateCommentLockState();
     }
 
@@ -155,6 +167,7 @@ public abstract class IssueFragmentBase extends ListDataBaseFragment<IssueEventH
         if (mImageGetter != null) {
             mImageGetter.clearHtmlCache();
         }
+        mReactionDetailsCache.clear();
         super.onRefresh();
     }
 
@@ -178,6 +191,30 @@ public abstract class IssueFragmentBase extends ListDataBaseFragment<IssueEventH
             return true;
         }
         return super.canChildScrollUp();
+    }
+
+    @Override
+    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+        super.onCreateOptionsMenu(menu, inflater);
+        inflater.inflate(R.menu.issue_fragment_menu, menu);
+
+        MenuItem reactItem = menu.findItem(R.id.react);
+        inflater.inflate(R.menu.reaction_menu, reactItem.getSubMenu());
+        if (mReactionMenuHelper == null) {
+            mReactionMenuHelper = new ReactionBar.AddReactionMenuHelper(getActivity(),
+                    reactItem.getSubMenu(), this, this, mReactionDetailsCache);
+        } else {
+            mReactionMenuHelper.updateFromMenu(reactItem.getSubMenu());
+        }
+        mReactionMenuHelper.startLoadingIfNeeded();
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (mReactionMenuHelper != null && mReactionMenuHelper.onItemClick(item)) {
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
     }
 
     public void reloadEvents(boolean alsoClearCaches) {
@@ -329,6 +366,11 @@ public abstract class IssueFragmentBase extends ListDataBaseFragment<IssueEventH
             assigneeGroup.setVisibility(View.GONE);
         }
 
+        ReactionBar reactions = (ReactionBar) mListHeaderView.findViewById(R.id.reactions);
+        reactions.setCallback(this, this);
+        reactions.setDetailsCache(mReactionDetailsCache);
+        reactions.setReactions(mIssue.getReactions());
+
         assignHighlightColor();
         bindSpecialViews(mListHeaderView);
     }
@@ -341,6 +383,40 @@ public abstract class IssueFragmentBase extends ListDataBaseFragment<IssueEventH
             labelGroup.setVisibility(View.VISIBLE);
         } else {
             labelGroup.setVisibility(View.GONE);
+        }
+    }
+
+    @Override
+    public Object getCacheKey() {
+        return mIssue;
+    }
+
+    @Override
+    public List<Reaction> loadReactionDetailsInBackground(ReactionBar.Item item) throws IOException {
+        IssueService service = (IssueService)
+                Gh4Application.get().getService(Gh4Application.ISSUE_SERVICE);
+        return service.getIssueReactions(new RepositoryId(mRepoOwner, mRepoName),
+                mIssue.getNumber());
+    }
+
+    @Override
+    public Reaction addReactionInBackground(ReactionBar.Item item, String content) throws IOException {
+        IssueService service = (IssueService)
+                Gh4Application.get().getService(Gh4Application.ISSUE_SERVICE);
+        return service.addIssueReaction(new RepositoryId(mRepoOwner, mRepoName),
+                mIssue.getNumber(), content);
+    }
+
+    @Override
+    public void onReactionsUpdated(ReactionBar.Item item, Reactions reactions) {
+        mIssue.setReactions(reactions);
+        if (mListHeaderView != null) {
+            ReactionBar bar = (ReactionBar) mListHeaderView.findViewById(R.id.reactions);
+            bar.setReactions(reactions);
+        }
+        if (mReactionMenuHelper != null) {
+            mReactionMenuHelper.update();
+            getActivity().supportInvalidateOptionsMenu();
         }
     }
 

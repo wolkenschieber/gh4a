@@ -41,6 +41,8 @@
     <string name="delete">Delete</string>
     <string name="reply">Reply</string>
     <string name="add_comment">Add comment</string>
+    <string name="add_reaction">Add reaction</string>
+    <string name="remove_reaction">Remove reaction</string>
     <string name="edit">Edit</string>
     <string name="members">Members</string>
     <string name="open">Open</string>
@@ -118,6 +120,16 @@
     <string name="browser_logout_completed_dialog_text">You can now proceed in the login process for the new account.</string>
     <string name="go_to_logout_page">Go to logout page</string>
     <string name="continue_login">Continue new login</string>
+    <string name="unread">Unread</string>
+    <string name="undo">Undo</string>
+
+    <string name="reaction_plus_one" translatable="false">+1</string>
+    <string name="reaction_minus_one" translatable="false">-1</string>
+    <string name="reaction_laugh">Laugh</string>
+    <string name="reaction_confused">Confused</string>
+    <string name="reaction_heart">Heart</string>
+    <string name="reaction_hooray">Hooray</string>
+
     <plurals name="contributor_extra_data">
         <item quantity="one">%1$d contribution</item>
         <item quantity="other">%1$d contributions</item>
@@ -475,6 +487,7 @@
     <string name="share_user_subject_loginonly">User %1$s</string>
     <string name="share_comment_subject">Comment #%1$d in issue %2$d at %3$s</string>
     <string name="share_commit_comment_subject">Commit comment #%1$d at %2$s</string>
+    <string name="share_line_subject">Line %1$d in file %2$s at %3$s</string>
 
     <!-- Webview text size -->
     <string name="menu_text_size">Code view text size</string>
