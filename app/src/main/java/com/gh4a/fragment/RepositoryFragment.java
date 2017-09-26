@@ -67,23 +67,32 @@ public class RepositoryFragment extends LoadingFragmentBase implements OnClickLi
         return f;
     }
 
+    private static final int ID_LOADER_README = 0;
+    private static final int ID_LOADER_PULL_REQUEST_COUNT = 1;
+    private static final String STATE_KEY_IS_README_EXPANDED = "is_readme_expanded";
+    private static final String STATE_KEY_IS_README_LOADED = "is_readme_loaded";
+
     private Repository mRepository;
     private View mContentView;
     private String mRef;
     private HttpImageGetter mImageGetter;
+    private TextView mReadmeView;
+    private View mLoadingView;
+    private TextView mReadmeTitleView;
+    private boolean mIsReadmeLoaded = false;
+    private boolean mIsReadmeExpanded = false;
 
     private final LoaderCallbacks<String> mReadmeCallback = new LoaderCallbacks<String>(this) {
         @Override
         protected Loader<LoaderResult<String>> onCreateLoader() {
+            mIsReadmeLoaded = false;
             return new ReadmeLoader(getActivity(), mRepository.getOwner().getLogin(),
                     mRepository.getName(), StringUtils.isBlank(mRef) ? mRepository.getDefaultBranch() : mRef);
         }
         @Override
         protected void onResultReady(String result) {
-            TextView readmeView = (TextView) mContentView.findViewById(R.id.readme);
-            View progress = mContentView.findViewById(R.id.pb_readme);
             AsyncTaskCompat.executeParallel(new FillReadmeTask(
-                    mRepository.getId(), readmeView, progress, mImageGetter), result);
+                    mRepository.getId(), mReadmeView, mLoadingView, mImageGetter), result);
         }
     };
 
@@ -99,10 +108,10 @@ public class RepositoryFragment extends LoadingFragmentBase implements OnClickLi
             v.findViewById(R.id.issues_progress).setVisibility(View.GONE);
             v.findViewById(R.id.pull_requests_progress).setVisibility(View.GONE);
 
-            TextView tvIssuesCount = (TextView) mContentView.findViewById(R.id.tv_issues_count);
+            TextView tvIssuesCount = mContentView.findViewById(R.id.tv_issues_count);
             tvIssuesCount.setText(String.valueOf(mRepository.getOpenIssues() - result));
 
-            TextView tvPullRequestsCountView = (TextView) v.findViewById(R.id.tv_pull_requests_count);
+            TextView tvPullRequestsCountView = v.findViewById(R.id.tv_pull_requests_count);
             tvPullRequestsCountView.setText(String.valueOf(result));
         }
     };
@@ -117,6 +126,9 @@ public class RepositoryFragment extends LoadingFragmentBase implements OnClickLi
     @Override
     protected View onCreateContentView(LayoutInflater inflater, ViewGroup parent) {
         mContentView = inflater.inflate(R.layout.repository, parent, false);
+        mReadmeView = mContentView.findViewById(R.id.readme);
+        mLoadingView = mContentView.findViewById(R.id.pb_readme);
+        mReadmeTitleView = mContentView.findViewById(R.id.readme_title);
         return mContentView;
     }
 
@@ -129,15 +141,19 @@ public class RepositoryFragment extends LoadingFragmentBase implements OnClickLi
 
     @Override
     public void onRefresh() {
+        if (mReadmeView != null) {
+            mReadmeView.setVisibility(View.GONE);
+        }
+        if (mLoadingView != null && mIsReadmeExpanded) {
+            mLoadingView.setVisibility(View.VISIBLE);
+        }
         if (mContentView != null) {
-            mContentView.findViewById(R.id.readme).setVisibility(View.GONE);
-            mContentView.findViewById(R.id.pb_readme).setVisibility(View.VISIBLE);
             mContentView.findViewById(R.id.pull_requests_progress).setVisibility(View.VISIBLE);
         }
         if (mImageGetter != null) {
             mImageGetter.clearHtmlCache();
         }
-        hideContentAndRestartLoaders(0, 1);
+        hideContentAndRestartLoaders(ID_LOADER_README, ID_LOADER_PULL_REQUEST_COUNT);
     }
 
     @Override
@@ -148,8 +164,16 @@ public class RepositoryFragment extends LoadingFragmentBase implements OnClickLi
         fillData();
         setContentShown(true);
 
-        getLoaderManager().initLoader(0, null, mReadmeCallback);
-        getLoaderManager().initLoader(1, null, mPullRequestsCallback);
+        if (savedInstanceState != null) {
+            mIsReadmeExpanded = savedInstanceState.getBoolean(STATE_KEY_IS_README_EXPANDED, false);
+            mIsReadmeLoaded = savedInstanceState.getBoolean(STATE_KEY_IS_README_LOADED, false);
+        }
+        if (mIsReadmeExpanded || mIsReadmeLoaded) {
+            getLoaderManager().initLoader(ID_LOADER_README, null, mReadmeCallback);
+        }
+        getLoaderManager().initLoader(ID_LOADER_PULL_REQUEST_COUNT, null, mPullRequestsCallback);
+
+        updateReadmeVisibility();
     }
 
     @Override
@@ -164,19 +188,31 @@ public class RepositoryFragment extends LoadingFragmentBase implements OnClickLi
         mImageGetter.pause();
     }
 
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putBoolean(STATE_KEY_IS_README_EXPANDED, mIsReadmeExpanded);
+        outState.putBoolean(STATE_KEY_IS_README_LOADED, mIsReadmeLoaded);
+    }
+
     public void setRef(String ref) {
         mRef = ref;
         getArguments().putString("ref", ref);
-        // reload readme
-        getLoaderManager().restartLoader(0, null, mReadmeCallback);
-        if (mContentView != null) {
-            mContentView.findViewById(R.id.readme).setVisibility(View.GONE);
-            mContentView.findViewById(R.id.pb_readme).setVisibility(View.VISIBLE);
+
+        // Reload readme
+        if (getLoaderManager().getLoader(ID_LOADER_README) != null) {
+            getLoaderManager().restartLoader(ID_LOADER_README, null, mReadmeCallback);
+        }
+        if (mReadmeView != null) {
+            mReadmeView.setVisibility(View.GONE);
+        }
+        if (mLoadingView != null && mIsReadmeExpanded) {
+            mLoadingView.setVisibility(View.VISIBLE);
         }
     }
 
     private void fillData() {
-        TextView tvRepoName = (TextView) mContentView.findViewById(R.id.tv_repo_name);
+        TextView tvRepoName = mContentView.findViewById(R.id.tv_repo_name);
         SpannableStringBuilder repoName = new SpannableStringBuilder();
         repoName.append(mRepository.getOwner().getLogin());
         repoName.append("/");
@@ -190,7 +226,7 @@ public class RepositoryFragment extends LoadingFragmentBase implements OnClickLi
         tvRepoName.setText(repoName);
         tvRepoName.setMovementMethod(UiUtils.CHECKING_LINK_METHOD);
 
-        TextView tvParentRepo = (TextView) mContentView.findViewById(R.id.tv_parent);
+        TextView tvParentRepo = mContentView.findViewById(R.id.tv_parent);
         if (mRepository.isFork() && mRepository.getParent() != null) {
             Repository parent = mRepository.getParent();
             tvParentRepo.setVisibility(View.VISIBLE);
@@ -213,6 +249,7 @@ public class RepositoryFragment extends LoadingFragmentBase implements OnClickLi
         mContentView.findViewById(R.id.tv_contributors_label).setOnClickListener(this);
         mContentView.findViewById(R.id.other_info).setOnClickListener(this);
         mContentView.findViewById(R.id.tv_releases_label).setOnClickListener(this);
+        mReadmeTitleView.setOnClickListener(this);
 
         Permissions permissions = mRepository.getPermissions();
         updateClickableLabel(R.id.tv_collaborators_label,
@@ -220,13 +257,13 @@ public class RepositoryFragment extends LoadingFragmentBase implements OnClickLi
         updateClickableLabel(R.id.tv_downloads_label, mRepository.isHasDownloads());
         updateClickableLabel(R.id.tv_wiki_label, mRepository.isHasWiki());
 
-        TextView tvStargazersCount = (TextView) mContentView.findViewById(R.id.tv_stargazers_count);
+        TextView tvStargazersCount = mContentView.findViewById(R.id.tv_stargazers_count);
         tvStargazersCount.setText(String.valueOf(mRepository.getWatchers()));
 
-        TextView tvForksCount = (TextView) mContentView.findViewById(R.id.tv_forks_count);
+        TextView tvForksCount = mContentView.findViewById(R.id.tv_forks_count);
         tvForksCount.setText(String.valueOf(mRepository.getForks()));
 
-        LinearLayout llIssues = (LinearLayout) mContentView.findViewById(R.id.cell_issues);
+        LinearLayout llIssues = mContentView.findViewById(R.id.cell_issues);
 
         if (mRepository.isHasIssues()) {
             llIssues.setVisibility(View.VISIBLE);
@@ -252,7 +289,7 @@ public class RepositoryFragment extends LoadingFragmentBase implements OnClickLi
     }
 
     private void fillTextView(int id, int stringId, String text) {
-        TextView view = (TextView) mContentView.findViewById(id);
+        TextView view = mContentView.findViewById(id);
 
         if (!StringUtils.isBlank(text)) {
             if (stringId != 0) {
@@ -273,13 +310,19 @@ public class RepositoryFragment extends LoadingFragmentBase implements OnClickLi
             mRepository.setWatchers(mRepository.getWatchers() - 1);
         }
 
-        TextView tvStargazersCount = (TextView) mContentView.findViewById(R.id.tv_stargazers_count);
+        TextView tvStargazersCount = mContentView.findViewById(R.id.tv_stargazers_count);
         tvStargazersCount.setText(String.valueOf(mRepository.getWatchers()));
     }
 
     @Override
     public void onClick(View view) {
         int id = view.getId();
+
+        if (id == R.id.readme_title) {
+            toggleReadmeExpanded();
+            return;
+        }
+
         String owner = mRepository.getOwner().getLogin();
         String name = mRepository.getName();
         Intent intent = null;
@@ -311,7 +354,27 @@ public class RepositoryFragment extends LoadingFragmentBase implements OnClickLi
         }
     }
 
-    private static class FillReadmeTask extends AsyncTask<String, Void, String> {
+    private void toggleReadmeExpanded() {
+        mIsReadmeExpanded = !mIsReadmeExpanded;
+
+        if (mIsReadmeExpanded && !mIsReadmeLoaded) {
+            getLoaderManager().initLoader(ID_LOADER_README, null, mReadmeCallback);
+        }
+
+        updateReadmeVisibility();
+    }
+
+    private void updateReadmeVisibility() {
+        mReadmeView.setVisibility(mIsReadmeExpanded && mIsReadmeLoaded ? View.VISIBLE : View.GONE);
+        mLoadingView.setVisibility(
+                mIsReadmeExpanded && !mIsReadmeLoaded ? View.VISIBLE : View.GONE);
+
+        int drawableAttr = mIsReadmeExpanded ? R.attr.dropUpArrowIcon : R.attr.dropDownArrowIcon;
+        int drawableRes = UiUtils.resolveDrawable(getContext(), drawableAttr);
+        mReadmeTitleView.setCompoundDrawablesWithIntrinsicBounds(0, 0, drawableRes, 0);
+    }
+
+    private class FillReadmeTask extends AsyncTask<String, Void, String> {
         private final Long mId;
         private final Context mContext;
         private final TextView mReadmeView;
@@ -345,8 +408,9 @@ public class RepositoryFragment extends LoadingFragmentBase implements OnClickLi
                 mReadmeView.setText(R.string.repo_no_readme);
                 mReadmeView.setTypeface(Typeface.DEFAULT, Typeface.ITALIC);
             }
-            mReadmeView.setVisibility(View.VISIBLE);
+            mReadmeView.setVisibility(mIsReadmeExpanded ? View.VISIBLE : View.GONE);
             mProgressView.setVisibility(View.GONE);
+            mIsReadmeLoaded = true;
         }
     }
 }

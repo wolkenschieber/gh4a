@@ -17,12 +17,15 @@ package com.gh4a.activities;
 
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.support.v4.content.Loader;
 import android.support.v7.app.ActionBar;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.text.TextUtils;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -38,6 +41,7 @@ import com.gh4a.loader.ReleaseLoader;
 import com.gh4a.utils.ApiHelpers;
 import com.gh4a.utils.AvatarHandler;
 import com.gh4a.utils.HttpImageGetter;
+import com.gh4a.utils.IntentUtils;
 import com.gh4a.utils.StringUtils;
 import com.gh4a.utils.UiUtils;
 import com.gh4a.widget.StyleableTextView;
@@ -131,6 +135,21 @@ public class ReleaseInfoActivity extends BaseActivity implements
     }
 
     @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.release, menu);
+        return super.onCreateOptionsMenu(menu);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == R.id.browser) {
+            IntentUtils.launchBrowser(this, Uri.parse(mRelease.getHtmlUrl()));
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    @Override
     public boolean canChildScrollUp() {
         return UiUtils.canViewScrollUp(mRootView);
     }
@@ -180,17 +199,17 @@ public class ReleaseInfoActivity extends BaseActivity implements
     }
 
     private void fillData() {
-        ImageView gravatar = (ImageView) findViewById(R.id.iv_gravatar);
+        ImageView gravatar = findViewById(R.id.iv_gravatar);
         AvatarHandler.assignAvatar(gravatar, mRelease.getAuthor());
         gravatar.setOnClickListener(this);
 
-        StyleableTextView details = (StyleableTextView) findViewById(R.id.tv_releaseinfo);
+        StyleableTextView details = findViewById(R.id.tv_releaseinfo);
         String detailsText = getString(R.string.release_details,
                 ApiHelpers.getUserLogin(this, mRelease.getAuthor()),
                 StringUtils.formatRelativeTime(this, mRelease.getCreatedAt(), true));
         StringUtils.applyBoldTagsAndSetText(details, detailsText);
 
-        TextView releaseType = (TextView) findViewById(R.id.tv_releasetype);
+        TextView releaseType = findViewById(R.id.tv_releasetype);
         if (mRelease.isDraft()) {
             releaseType.setText(R.string.release_type_draft);
         } else if (mRelease.isPrerelease()) {
@@ -199,12 +218,12 @@ public class ReleaseInfoActivity extends BaseActivity implements
             releaseType.setText(R.string.release_type_final);
         }
 
-        TextView tag = (TextView) findViewById(R.id.tv_releasetag);
+        TextView tag = findViewById(R.id.tv_releasetag);
         tag.setText(getString(R.string.release_tag, mRelease.getTagName()));
         tag.setOnClickListener(this);
 
         if (mRelease.getAssets() != null && !mRelease.getAssets().isEmpty()) {
-            RecyclerView downloadsList = (RecyclerView) findViewById(R.id.download_list);
+            RecyclerView downloadsList = findViewById(R.id.download_list);
             DownloadAdapter adapter = new DownloadAdapter(this);
             adapter.addAll(mRelease.getAssets());
             adapter.setOnItemClickListener(this);
@@ -224,7 +243,7 @@ public class ReleaseInfoActivity extends BaseActivity implements
     }
 
     private void fillNotes(String bodyHtml) {
-        TextView body = (TextView) findViewById(R.id.tv_release_notes);
+        TextView body = findViewById(R.id.tv_release_notes);
 
         if (!StringUtils.isBlank(bodyHtml)) {
             mImageGetter.bind(body, bodyHtml, mRelease.getId());

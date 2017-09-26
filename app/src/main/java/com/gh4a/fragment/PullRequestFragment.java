@@ -18,6 +18,7 @@ package com.gh4a.fragment;
 import android.content.Intent;
 import android.os.Bundle;
 import android.support.annotation.StringRes;
+import android.support.annotation.AttrRes;
 import android.support.v4.content.Loader;
 import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
@@ -33,10 +34,10 @@ import com.gh4a.activities.EditIssueCommentActivity;
 import com.gh4a.activities.EditPullRequestCommentActivity;
 import com.gh4a.activities.RepositoryActivity;
 import com.gh4a.loader.CommitStatusLoader;
-import com.gh4a.loader.IssueEventHolder;
 import com.gh4a.loader.LoaderCallbacks;
 import com.gh4a.loader.LoaderResult;
 import com.gh4a.loader.PullRequestCommentListLoader;
+import com.gh4a.loader.TimelineItem;
 import com.gh4a.utils.ApiHelpers;
 import com.gh4a.utils.IntentUtils;
 import com.gh4a.utils.StringUtils;
@@ -126,10 +127,10 @@ public class PullRequestFragment extends IssueFragmentBase {
         View branchGroup = headerView.findViewById(R.id.pr_container);
         branchGroup.setVisibility(View.VISIBLE);
 
-        StyleableTextView fromBranch = (StyleableTextView) branchGroup.findViewById(R.id.tv_pr_from);
+        StyleableTextView fromBranch = branchGroup.findViewById(R.id.tv_pr_from);
         formatMarkerText(fromBranch, R.string.pull_request_from, mPullRequest.getHead());
 
-        StyleableTextView toBranch = (StyleableTextView) branchGroup.findViewById(R.id.tv_pr_to);
+        StyleableTextView toBranch = branchGroup.findViewById(R.id.tv_pr_to);
         formatMarkerText(toBranch, R.string.pull_request_to, mPullRequest.getBase());
     }
 
@@ -199,14 +200,14 @@ public class PullRequestFragment extends IssueFragmentBase {
             statusLabelResId = R.string.pull_merge_status_unknown;
         }
 
-        ImageView statusIcon = (ImageView) mListHeaderView.findViewById(R.id.iv_merge_status_icon);
+        ImageView statusIcon = mListHeaderView.findViewById(R.id.iv_merge_status_icon);
         statusIcon.setImageResource(UiUtils.resolveDrawable(getActivity(),
                 statusIconDrawableAttrId));
 
-        TextView statusLabel = (TextView) mListHeaderView.findViewById(R.id.merge_status_label);
+        TextView statusLabel = mListHeaderView.findViewById(R.id.merge_status_label);
         statusLabel.setText(statusLabelResId);
 
-        ViewGroup statusContainer = (ViewGroup)
+        ViewGroup statusContainer =
                 mListHeaderView.findViewById(R.id.merge_commit_status_container);
         LayoutInflater inflater = getLayoutInflater(null);
         statusContainer.removeAllViews();
@@ -222,13 +223,13 @@ public class PullRequestFragment extends IssueFragmentBase {
             } else {
                 iconDrawableAttrId = R.attr.commitStatusUnknownIcon;
             }
-            ImageView icon = (ImageView) statusRow.findViewById(R.id.iv_status_icon);
+            ImageView icon = statusRow.findViewById(R.id.iv_status_icon);
             icon.setImageResource(UiUtils.resolveDrawable(getActivity(), iconDrawableAttrId));
 
-            TextView context = (TextView) statusRow.findViewById(R.id.tv_context);
+            TextView context = statusRow.findViewById(R.id.tv_context);
             context.setText(status.getContext());
 
-            TextView description = (TextView) statusRow.findViewById(R.id.tv_desc);
+            TextView description = statusRow.findViewById(R.id.tv_desc);
             description.setText(status.getDescription());
 
             statusContainer.addView(statusRow);
@@ -240,18 +241,22 @@ public class PullRequestFragment extends IssueFragmentBase {
     }
 
     @Override
-    public Loader<LoaderResult<List<IssueEventHolder>>> onCreateLoader() {
+    public Loader<LoaderResult<List<TimelineItem>>> onCreateLoader() {
         return new PullRequestCommentListLoader(getActivity(),
                 mRepoOwner, mRepoName, mPullRequest.getNumber());
     }
 
     @Override
-    public void editComment(IssueEventHolder item) {
-        Intent intent = item.comment instanceof CommitComment
+    public void editComment(Comment comment) {
+        final @AttrRes int highlightColorAttr = mPullRequest.isMerged()
+                ? R.attr.colorPullRequestMerged
+                : ApiHelpers.IssueState.CLOSED.equals(mPullRequest.getState())
+                        ? R.attr.colorIssueClosed : R.attr.colorIssueOpen;
+        Intent intent = comment instanceof CommitComment
                 ? EditPullRequestCommentActivity.makeIntent(getActivity(), mRepoOwner, mRepoName,
-                        mPullRequest.getNumber(), (CommitComment) item.comment)
+                        mPullRequest.getNumber(), 0L, (CommitComment) comment, highlightColorAttr)
                 : EditIssueCommentActivity.makeIntent(getActivity(), mRepoOwner, mRepoName,
-                        mIssue.getNumber(), item.comment);
+                        mIssue.getNumber(), comment, highlightColorAttr);
         startActivityForResult(intent, REQUEST_EDIT);
     }
 
@@ -272,5 +277,10 @@ public class PullRequestFragment extends IssueFragmentBase {
     @Override
     public int getCommentEditorHintResId() {
         return R.string.pull_request_comment_hint;
+    }
+
+    @Override
+    public void replyToComment(long replyToId) {
+        // Not used in this screen
     }
 }

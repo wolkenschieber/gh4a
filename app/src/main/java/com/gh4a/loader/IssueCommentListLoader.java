@@ -16,8 +16,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-public class IssueCommentListLoader extends BaseLoader<List<IssueEventHolder>> {
-    private final boolean mIsPullRequest;
+public class IssueCommentListLoader extends BaseLoader<List<TimelineItem>> {
 
     protected final String mRepoOwner;
     protected final String mRepoName;
@@ -28,49 +27,49 @@ public class IssueCommentListLoader extends BaseLoader<List<IssueEventHolder>> {
         IssueEvent.TYPE_REFERENCED, IssueEvent.TYPE_ASSIGNED, IssueEvent.TYPE_UNASSIGNED,
         IssueEvent.TYPE_LABELED, IssueEvent.TYPE_UNLABELED, IssueEvent.TYPE_LOCKED,
         IssueEvent.TYPE_UNLOCKED, IssueEvent.TYPE_MILESTONED, IssueEvent.TYPE_DEMILESTONED,
-        IssueEvent.TYPE_RENAMED
+        IssueEvent.TYPE_RENAMED, IssueEvent.TYPE_HEAD_REF_DELETED, IssueEvent.TYPE_HEAD_REF_RESTORED
     );
 
-    protected static final Comparator<IssueEventHolder> SORTER = new Comparator<IssueEventHolder>() {
+    public static final Comparator<TimelineItem> TIMELINE_ITEM_COMPARATOR = new Comparator<TimelineItem>() {
         @Override
-        public int compare(IssueEventHolder lhs, IssueEventHolder rhs) {
+        public int compare(TimelineItem lhs, TimelineItem rhs) {
+            if (lhs.getCreatedAt() == null) {
+                return 1;
+            }
+            if (rhs.getCreatedAt() == null) {
+                return -1;
+            }
             return lhs.getCreatedAt().compareTo(rhs.getCreatedAt());
         }
     };
 
     public IssueCommentListLoader(Context context, String repoOwner, String repoName,
             int issueNumber) {
-        this(context, repoOwner, repoName, issueNumber, false);
-    }
-
-    protected IssueCommentListLoader(Context context, String repoOwner, String repoName,
-            int issueNumber, boolean isPullRequest) {
         super(context);
         mRepoOwner = repoOwner;
         mRepoName = repoName;
         mIssueNumber = issueNumber;
-        mIsPullRequest = isPullRequest;
     }
 
     @Override
-    protected List<IssueEventHolder> doLoadInBackground() throws IOException {
+    protected List<TimelineItem> doLoadInBackground() throws IOException {
         IssueService issueService = (IssueService)
                 Gh4Application.get().getService(Gh4Application.ISSUE_SERVICE);
         List<Comment> comments = issueService.getComments(
                 new RepositoryId(mRepoOwner, mRepoName), mIssueNumber);
         List<IssueEvent> events = issueService.getIssueEvents(mRepoOwner, mRepoName, mIssueNumber);
-        List<IssueEventHolder> result = new ArrayList<>();
+        List<TimelineItem> result = new ArrayList<>();
 
         for (Comment comment : comments) {
-            result.add(new IssueEventHolder(comment, mIsPullRequest));
+            result.add(new TimelineItem.TimelineComment(comment));
         }
         for (IssueEvent event : events) {
             if (INTERESTING_EVENTS.contains(event.getEvent())) {
-                result.add(new IssueEventHolder(event, mIsPullRequest));
+                result.add(new TimelineItem.TimelineEvent(event));
             }
         }
 
-        Collections.sort(result, SORTER);
+        Collections.sort(result, TIMELINE_ITEM_COMPARATOR);
 
         return result;
     }

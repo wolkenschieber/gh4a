@@ -10,23 +10,7 @@
  *******************************************************************************/
 package org.eclipse.egit.github.core.service;
 
-import static org.eclipse.egit.github.core.client.IGitHubConstants.SEGMENT_COMMENTS;
-import static org.eclipse.egit.github.core.client.IGitHubConstants.SEGMENT_COMMITS;
-import static org.eclipse.egit.github.core.client.IGitHubConstants.SEGMENT_FILES;
-import static org.eclipse.egit.github.core.client.IGitHubConstants.SEGMENT_MERGE;
-import static org.eclipse.egit.github.core.client.IGitHubConstants.SEGMENT_PULLS;
-import static org.eclipse.egit.github.core.client.IGitHubConstants.SEGMENT_REACTIONS;
-import static org.eclipse.egit.github.core.client.IGitHubConstants.SEGMENT_REPOS;
-import static org.eclipse.egit.github.core.client.PagedRequest.PAGE_FIRST;
-import static org.eclipse.egit.github.core.client.PagedRequest.PAGE_SIZE;
-
 import com.google.gson.reflect.TypeToken;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 import org.eclipse.egit.github.core.CommitComment;
 import org.eclipse.egit.github.core.CommitFile;
@@ -36,10 +20,28 @@ import org.eclipse.egit.github.core.PullRequest;
 import org.eclipse.egit.github.core.PullRequestMarker;
 import org.eclipse.egit.github.core.Reaction;
 import org.eclipse.egit.github.core.RepositoryCommit;
+import org.eclipse.egit.github.core.Review;
 import org.eclipse.egit.github.core.client.GitHubClient;
 import org.eclipse.egit.github.core.client.GitHubRequest;
 import org.eclipse.egit.github.core.client.PageIterator;
 import org.eclipse.egit.github.core.client.PagedRequest;
+
+import java.io.IOException;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.eclipse.egit.github.core.client.IGitHubConstants.SEGMENT_COMMENTS;
+import static org.eclipse.egit.github.core.client.IGitHubConstants.SEGMENT_COMMITS;
+import static org.eclipse.egit.github.core.client.IGitHubConstants.SEGMENT_FILES;
+import static org.eclipse.egit.github.core.client.IGitHubConstants.SEGMENT_MERGE;
+import static org.eclipse.egit.github.core.client.IGitHubConstants.SEGMENT_PULLS;
+import static org.eclipse.egit.github.core.client.IGitHubConstants.SEGMENT_REACTIONS;
+import static org.eclipse.egit.github.core.client.IGitHubConstants.SEGMENT_REPOS;
+import static org.eclipse.egit.github.core.client.IGitHubConstants.SEGMENT_REVIEWS;
+import static org.eclipse.egit.github.core.client.PagedRequest.PAGE_FIRST;
+import static org.eclipse.egit.github.core.client.PagedRequest.PAGE_SIZE;
 
 /**
  * Service class for creating, updating, getting, and listing pull requests as
@@ -415,13 +417,75 @@ public class PullRequestService extends GitHubService {
 	 * Get all comments on commits in given pull request
 	 *
 	 * @param repository
-	 * @param id
+	 * @param pullRequestNumber
 	 * @return non-null list of comments
 	 * @throws IOException
 	 */
 	public List<CommitComment> getComments(IRepositoryIdProvider repository,
+			int pullRequestNumber) throws IOException {
+		return getAll(pageComments(repository, pullRequestNumber));
+	}
+
+	/**
+	 * Page pull request commit comments
+	 *
+	 * @param repository
+	 * @param pullRequestNumber
+	 * @return iterator over pages of commit comments
+	 */
+	public PageIterator<CommitComment> pageComments(
+			IRepositoryIdProvider repository, int pullRequestNumber) {
+		return pageComments(repository, pullRequestNumber, PAGE_SIZE);
+	}
+
+	/**
+	 * Page pull request commit comments
+	 *
+	 * @param repository
+	 * @param pullRequestNumber
+	 * @param size
+	 * @return iterator over pages of commit comments
+	 */
+	public PageIterator<CommitComment> pageComments(
+			IRepositoryIdProvider repository, int pullRequestNumber, int size) {
+		return pageComments(repository, pullRequestNumber, PAGE_FIRST, size);
+	}
+
+	/**
+	 * Page pull request commit comments
+	 *
+	 * @param repository
+	 * @param pullRequestNumber
+	 * @param start
+	 * @param size
+	 * @return iterator over pages of commit comments
+	 */
+	public PageIterator<CommitComment> pageComments(
+			IRepositoryIdProvider repository, int pullRequestNumber, int start, int size) {
+		String repoId = getId(repository);
+		StringBuilder uri = new StringBuilder(SEGMENT_REPOS);
+		uri.append('/').append(repoId);
+		uri.append(SEGMENT_PULLS);
+		uri.append('/').append(pullRequestNumber);
+		uri.append(SEGMENT_COMMENTS);
+		PagedRequest<CommitComment> request = createPagedRequest(start, size);
+		request.setUri(uri);
+		request.setType(new TypeToken<List<CommitComment>>() {
+		}.getType());
+		return createPageIterator(request);
+	}
+
+	/**
+	 * Get all comments on commits in given pull request
+	 *
+	 * @param repository
+	 * @param id
+	 * @return non-null list of comments
+	 * @throws IOException
+	 */
+	public List<Review> getReviews(IRepositoryIdProvider repository,
 			int id) throws IOException {
-		return getAll(pageComments(repository, id));
+		return getAll(pageReviews(repository, id));
 	}
 
 	/**
@@ -431,9 +495,9 @@ public class PullRequestService extends GitHubService {
 	 * @param id
 	 * @return iterator over pages of commit comments
 	 */
-	public PageIterator<CommitComment> pageComments(
+	public PageIterator<Review> pageReviews(
 			IRepositoryIdProvider repository, int id) {
-		return pageComments(repository, id, PAGE_SIZE);
+		return pageReviews(repository, id, PAGE_SIZE);
 	}
 
 	/**
@@ -444,9 +508,9 @@ public class PullRequestService extends GitHubService {
 	 * @param size
 	 * @return iterator over pages of commit comments
 	 */
-	public PageIterator<CommitComment> pageComments(
+	public PageIterator<Review> pageReviews(
 			IRepositoryIdProvider repository, int id, int size) {
-		return pageComments(repository, id, PAGE_FIRST, size);
+		return pageReviews(repository, id, PAGE_FIRST, size);
 	}
 
 	/**
@@ -458,13 +522,105 @@ public class PullRequestService extends GitHubService {
 	 * @param size
 	 * @return iterator over pages of commit comments
 	 */
-	public PageIterator<CommitComment> pageComments(
+	public PageIterator<Review> pageReviews(
 			IRepositoryIdProvider repository, int id, int start, int size) {
 		String repoId = getId(repository);
 		StringBuilder uri = new StringBuilder(SEGMENT_REPOS);
 		uri.append('/').append(repoId);
 		uri.append(SEGMENT_PULLS);
 		uri.append('/').append(id);
+		uri.append(SEGMENT_REVIEWS);
+		PagedRequest<Review> request = createPagedRequest(start, size);
+		request.setUri(uri);
+		request.setType(new TypeToken<List<Review>>() {
+		}.getType());
+		return createPageIterator(request);
+	}
+
+	/**
+	 * Get pull request review with the given id.
+     *
+	 * @param repository
+	 * @param pullRequestNumber
+	 * @param reviewId
+	 * @return review
+	 * @throws IOException
+	 */
+	public Review getReview(IRepositoryIdProvider repository, int pullRequestNumber,
+			long reviewId) throws IOException {
+		String repoId = getId(repository);
+		StringBuilder uri = new StringBuilder(SEGMENT_REPOS);
+		uri.append('/').append(repoId);
+		uri.append(SEGMENT_PULLS);
+		uri.append('/').append(pullRequestNumber);
+		uri.append(SEGMENT_REVIEWS);
+		uri.append('/').append(reviewId);
+		GitHubRequest request = createRequest();
+		request.setUri(uri);
+		request.setType(Review.class);
+		return (Review) client.get(request).getBody();
+	}
+
+	/**
+	 * Get all comments on a review in given pull request.
+	 *
+	 * @param repository
+	 * @param pullRequestNumber
+	 * @param reviewId
+	 * @return non-null list of comments
+	 * @throws IOException
+	 */
+	public List<CommitComment> getReviewComments(IRepositoryIdProvider repository,
+			int pullRequestNumber, long reviewId) throws IOException {
+		return getAll(pageReviewComments(repository, pullRequestNumber, reviewId));
+	}
+
+	/**
+	 * Page pull request review comments
+	 *
+	 * @param repository
+	 * @param pullRequestNumber
+	 * @param reviewId
+	 * @return iterator over pages of review comments
+	 */
+	public PageIterator<CommitComment> pageReviewComments(IRepositoryIdProvider repository,
+			int pullRequestNumber, long reviewId) {
+		return pageReviewComments(repository, pullRequestNumber, reviewId, PAGE_SIZE);
+	}
+
+	/**
+	 * Page pull request review comments
+	 *
+	 * @param repository
+	 * @param pullRequestNumber
+	 * @param reviewId
+	 * @param size
+	 *  @return iterator over pages of review comments
+	 */
+	public PageIterator<CommitComment> pageReviewComments(IRepositoryIdProvider repository,
+			int pullRequestNumber, long reviewId, int size) {
+		return pageReviewComments(repository, pullRequestNumber, reviewId, PAGE_FIRST, size);
+	}
+
+	/**
+	 * Page pull request review comments
+	 *
+	 * @param repository
+	 * @param pullRequestNumber
+	 * @param reviewId
+	 * @param start
+	 * @param size
+	 * @return iterator over pages of review comments
+	 */
+	public PageIterator<CommitComment> pageReviewComments(IRepositoryIdProvider repository,
+			int pullRequestNumber, long reviewId, int start, int size) {
+		String repoId = getId(repository);
+		StringBuilder uri = new StringBuilder(SEGMENT_REPOS);
+		uri.append('/').append(repoId);
+		uri.append(SEGMENT_PULLS);
+		uri.append('/').append(pullRequestNumber);
+		uri.append(SEGMENT_REVIEWS);
+		uri.append('/').append(reviewId);
 		uri.append(SEGMENT_COMMENTS);
 		PagedRequest<CommitComment> request = createPagedRequest(start, size);
 		request.setUri(uri);
@@ -543,7 +699,7 @@ public class PullRequestService extends GitHubService {
 	 * @throws IOException
 	 */
 	public CommitComment replyToComment(IRepositoryIdProvider repository,
-			int pullRequestId, int commentId, String body) throws IOException {
+			int pullRequestId, long commentId, String body) throws IOException {
 		String repoId = getId(repository);
 		StringBuilder uri = new StringBuilder(SEGMENT_REPOS);
 		uri.append('/').append(repoId);

@@ -20,12 +20,16 @@ import android.os.Bundle;
 import android.support.v4.content.Loader;
 import android.text.format.DateFormat;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.gh4a.BackgroundTask;
 import com.gh4a.Gh4Application;
 import com.gh4a.R;
 import com.gh4a.activities.FollowerFollowingListActivity;
@@ -34,6 +38,7 @@ import com.gh4a.activities.OrganizationMemberListActivity;
 import com.gh4a.activities.RepositoryActivity;
 import com.gh4a.activities.RepositoryListActivity;
 import com.gh4a.activities.UserActivity;
+import com.gh4a.loader.IsFollowingUserLoader;
 import com.gh4a.loader.LoaderCallbacks;
 import com.gh4a.loader.LoaderResult;
 import com.gh4a.loader.OrganizationListLoader;
@@ -45,6 +50,7 @@ import com.gh4a.utils.StringUtils;
 
 import org.eclipse.egit.github.core.Repository;
 import org.eclipse.egit.github.core.User;
+import org.eclipse.egit.github.core.service.UserService;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -65,6 +71,8 @@ public class UserFragment extends LoadingFragmentBase implements View.OnClickLis
     private String mUserLogin;
     private User mUser;
     private View mContentView;
+    private Boolean mIsFollowing;
+    private boolean mIsSelf;
 
     private final LoaderCallbacks<User> mUserCallback = new LoaderCallbacks<User>(this) {
         @Override
@@ -76,7 +84,7 @@ public class UserFragment extends LoadingFragmentBase implements View.OnClickLis
             mUser = result;
             fillData();
             setContentShown(true);
-            getActivity().supportInvalidateOptionsMenu();
+            getActivity().invalidateOptionsMenu();
         }
     };
 
@@ -107,10 +115,24 @@ public class UserFragment extends LoadingFragmentBase implements View.OnClickLis
         }
     };
 
+    private final LoaderCallbacks<Boolean> mIsFollowingCallback = new LoaderCallbacks<Boolean>(this) {
+        @Override
+        protected Loader<LoaderResult<Boolean>> onCreateLoader() {
+            return new IsFollowingUserLoader(getActivity(), mUserLogin);
+        }
+        @Override
+        protected void onResultReady(Boolean result) {
+            mIsFollowing = result;
+            getActivity().invalidateOptionsMenu();
+        }
+    };
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         mUserLogin = getArguments().getString("login");
+        mIsSelf = ApiHelpers.loginEquals(mUserLogin, Gh4Application.get().getAuthLogin());
+        setHasOptionsMenu(true);
     }
 
     @Override
@@ -122,11 +144,13 @@ public class UserFragment extends LoadingFragmentBase implements View.OnClickLis
     @Override
     public void onRefresh() {
         mUser = null;
+        mIsFollowing = false;
         if (mContentView != null) {
             fillOrganizations(null);
             fillTopRepos(null);
         }
-        hideContentAndRestartLoaders(0);
+        hideContentAndRestartLoaders(0, 3);
+        getActivity().invalidateOptionsMenu();
     }
 
     @Override
@@ -136,13 +160,57 @@ public class UserFragment extends LoadingFragmentBase implements View.OnClickLis
         setContentShown(false);
 
         getLoaderManager().initLoader(0, null, mUserCallback);
+
+        if (!mIsSelf && Gh4Application.get().isAuthorized()) {
+            getLoaderManager().initLoader(3, null, mIsFollowingCallback);
+        }
+    }
+
+    @Override
+    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+        inflater.inflate(R.menu.user_follow_menu, menu);
+        super.onCreateOptionsMenu(menu, inflater);
+    }
+
+    @Override
+    public void onPrepareOptionsMenu(Menu menu) {
+        super.onPrepareOptionsMenu(menu);
+
+        MenuItem followAction = menu.findItem(R.id.follow);
+        if (followAction != null) {
+            if (!mIsSelf && Gh4Application.get().isAuthorized() && mUser != null
+                    && !ApiHelpers.UserType.ORG.equals(mUser.getType())) {
+                followAction.setVisible(true);
+                if (mIsFollowing == null) {
+                    followAction.setActionView(R.layout.ab_loading);
+                    followAction.expandActionView();
+                } else if (mIsFollowing) {
+                    followAction.setTitle(R.string.user_unfollow_action);
+                } else {
+                    followAction.setTitle(R.string.user_follow_action);
+                }
+            } else {
+                followAction.setVisible(false);
+            }
+        }
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == R.id.follow) {
+            item.setActionView(R.layout.ab_loading);
+            item.expandActionView();
+            new UpdateFollowTask().schedule();
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
     }
 
     private void fillData() {
-        ImageView gravatar = (ImageView) mContentView.findViewById(R.id.iv_gravatar);
+        ImageView gravatar = mContentView.findViewById(R.id.iv_gravatar);
         AvatarHandler.assignAvatar(gravatar, mUser);
 
-        TextView tvFollowersCount = (TextView) mContentView.findViewById(R.id.tv_followers_count);
+        TextView tvFollowersCount = mContentView.findViewById(R.id.tv_followers_count);
         tvFollowersCount.setText(String.valueOf(mUser.getFollowers()));
 
         View llOrgMembers = mContentView.findViewById(R.id.cell_org_members);
@@ -158,7 +226,7 @@ public class UserFragment extends LoadingFragmentBase implements View.OnClickLis
 
         mContentView.findViewById(R.id.cell_repos).setOnClickListener(this);
 
-        TextView tvReposCount = (TextView) mContentView.findViewById(R.id.tv_repos_count);
+        TextView tvReposCount = mContentView.findViewById(R.id.tv_repos_count);
         if (ApiHelpers.loginEquals(mUserLogin, Gh4Application.get().getAuthLogin())) {
             tvReposCount.setText(String.valueOf(mUser.getTotalPrivateRepos() + mUser.getPublicRepos()));
         } else {
@@ -171,7 +239,7 @@ public class UserFragment extends LoadingFragmentBase implements View.OnClickLis
         //hide following if organization
         fillCountIfUser(R.id.cell_following, R.id.tv_following_count, mUser.getFollowing());
 
-        TextView tvName = (TextView) mContentView.findViewById(R.id.tv_name);
+        TextView tvName = mContentView.findViewById(R.id.tv_name);
         String name = StringUtils.isBlank(mUser.getName()) ? mUser.getLogin() : mUser.getName();
         if (ApiHelpers.UserType.ORG.equals(mUser.getType())) {
             tvName.setText(getString(R.string.org_user_template, name));
@@ -179,7 +247,7 @@ public class UserFragment extends LoadingFragmentBase implements View.OnClickLis
             tvName.setText(name);
         }
 
-        TextView tvCreated = (TextView) mContentView.findViewById(R.id.tv_created_at);
+        TextView tvCreated = mContentView.findViewById(R.id.tv_created_at);
         if (mUser.getCreatedAt() != null) {
             tvCreated.setText(getString(R.string.user_created_at,
                     DateFormat.getMediumDateFormat(getActivity()).format(mUser.getCreatedAt())));
@@ -204,7 +272,7 @@ public class UserFragment extends LoadingFragmentBase implements View.OnClickLis
     private void fillCountIfUser(int layoutId, int countId, int count) {
         View layout = mContentView.findViewById(layoutId);
         if (ApiHelpers.UserType.USER.equals(mUser.getType())) {
-            TextView countView = (TextView) mContentView.findViewById(countId);
+            TextView countView = mContentView.findViewById(countId);
             countView.setText(String.valueOf(count));
             layout.setOnClickListener(this);
         } else {
@@ -213,7 +281,7 @@ public class UserFragment extends LoadingFragmentBase implements View.OnClickLis
     }
 
     private void fillTextView(int id, String text) {
-        TextView view = (TextView) mContentView.findViewById(id);
+        TextView view = mContentView.findViewById(id);
         if (!StringUtils.isBlank(text)) {
             view.setText(text);
             view.setVisibility(View.VISIBLE);
@@ -253,7 +321,7 @@ public class UserFragment extends LoadingFragmentBase implements View.OnClickLis
     }
 
     private void fillTopRepos(Collection<Repository> topRepos) {
-        LinearLayout ll = (LinearLayout) mContentView.findViewById(R.id.ll_top_repos);
+        LinearLayout ll = mContentView.findViewById(R.id.ll_top_repos);
         ll.removeAllViews();
 
         LayoutInflater inflater = getLayoutInflater(null);
@@ -264,10 +332,10 @@ public class UserFragment extends LoadingFragmentBase implements View.OnClickLis
                 rowView.setOnClickListener(this);
                 rowView.setTag(repo);
 
-                TextView tvTitle = (TextView) rowView.findViewById(R.id.tv_title);
+                TextView tvTitle = rowView.findViewById(R.id.tv_title);
                 tvTitle.setText(repo.getOwner().getLogin() + "/" + repo.getName());
 
-                TextView tvDesc = (TextView) rowView.findViewById(R.id.tv_desc);
+                TextView tvDesc = rowView.findViewById(R.id.tv_desc);
                 if (!StringUtils.isBlank(repo.getDescription())) {
                     tvDesc.setVisibility(View.VISIBLE);
                     tvDesc.setText(repo.getDescription());
@@ -275,10 +343,10 @@ public class UserFragment extends LoadingFragmentBase implements View.OnClickLis
                     tvDesc.setVisibility(View.GONE);
                 }
 
-                TextView tvForks = (TextView) rowView.findViewById(R.id.tv_forks);
+                TextView tvForks = rowView.findViewById(R.id.tv_forks);
                 tvForks.setText(String.valueOf(repo.getForks()));
 
-                TextView tvStars = (TextView) rowView.findViewById(R.id.tv_stars);
+                TextView tvStars = rowView.findViewById(R.id.tv_stars);
                 tvStars.setText(String.valueOf(repo.getWatchers()));
 
                 ll.addView(rowView);
@@ -300,8 +368,8 @@ public class UserFragment extends LoadingFragmentBase implements View.OnClickLis
     }
 
     private void fillOrganizations(List<User> organizations) {
-        ViewGroup llOrgs = (ViewGroup) mContentView.findViewById(R.id.ll_orgs);
-        LinearLayout llOrg = (LinearLayout) mContentView.findViewById(R.id.ll_org);
+        ViewGroup llOrgs = mContentView.findViewById(R.id.ll_orgs);
+        LinearLayout llOrg = mContentView.findViewById(R.id.ll_org);
         int count = organizations != null ? organizations.size() : 0;
         LayoutInflater inflater = getLayoutInflater(null);
 
@@ -315,27 +383,52 @@ public class UserFragment extends LoadingFragmentBase implements View.OnClickLis
             rowView.setOnClickListener(this);
             rowView.setTag(org);
 
-            ImageView avatar = (ImageView) rowView.findViewById(R.id.iv_gravatar);
+            ImageView avatar = rowView.findViewById(R.id.iv_gravatar);
             AvatarHandler.assignAvatar(avatar, org);
 
-            TextView nameView = (TextView) rowView.findViewById(R.id.tv_title);
+            TextView nameView = rowView.findViewById(R.id.tv_title);
             nameView.setText(org.getLogin());
 
             llOrg.addView(rowView);
         }
     }
 
-    public void updateFollowingAction(boolean following) {
+    public void updateFollowingAction() {
         if (mUser == null) {
             return;
         }
 
-        if (following) {
+        if (mIsFollowing) {
             mUser.setFollowers(mUser.getFollowers() + 1);
         } else {
             mUser.setFollowers(mUser.getFollowers() - 1);
         }
-        TextView tvFollowersCount = (TextView) mContentView.findViewById(R.id.tv_followers_count);
+        TextView tvFollowersCount = mContentView.findViewById(R.id.tv_followers_count);
         tvFollowersCount.setText(String.valueOf(mUser.getFollowers()));
+    }
+
+    private class UpdateFollowTask extends BackgroundTask<Void> {
+        public UpdateFollowTask() {
+            super(UserFragment.this.getActivity());
+        }
+
+        @Override
+        protected Void run() throws Exception {
+            UserService userService = (UserService)
+                    Gh4Application.get().getService(Gh4Application.USER_SERVICE);
+            if (mIsFollowing) {
+                userService.unfollow(mUserLogin);
+            } else {
+                userService.follow(mUserLogin);
+            }
+            return null;
+        }
+
+        @Override
+        protected void onSuccess(Void result) {
+            mIsFollowing = !mIsFollowing;
+            updateFollowingAction();
+            getActivity().invalidateOptionsMenu();
+        }
     }
 }

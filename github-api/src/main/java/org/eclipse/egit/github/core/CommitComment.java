@@ -13,7 +13,7 @@ package org.eclipse.egit.github.core;
 /**
  * Commit comment model class.
  */
-public class CommitComment extends Comment {
+public class CommitComment extends Comment implements Comparable<CommitComment> {
 
 	/** serialVersionUID */
 	private static final long serialVersionUID = 5932088388457362322L;
@@ -31,6 +31,10 @@ public class CommitComment extends Comment {
 	private String path;
 
 	private String diffHunk;
+
+	private long pullRequestReviewId;
+
+	private String pullRequestUrl;
 
 	/**
 	 * @return line
@@ -142,5 +146,34 @@ public class CommitComment extends Comment {
 	public CommitComment setDiffHunk(String diffHunk) {
 		this.diffHunk = diffHunk;
 		return this;
+	}
+
+	public long getPullRequestReviewId() {
+		return pullRequestReviewId;
+	}
+
+	public CommitComment setPullRequestReviewId(long pullRequestReviewId) {
+		this.pullRequestReviewId = pullRequestReviewId;
+		return this;
+	}
+
+	public String getPullRequestUrl() {
+		return pullRequestUrl;
+	}
+
+	public CommitComment setPullRequestUrl(String pullRequestUrl) {
+		this.pullRequestUrl = pullRequestUrl;
+		return this;
+	}
+
+	@Override
+	public int compareTo(CommitComment other) {
+		if (getCreatedAt() == null) {
+			return 1;
+		}
+		if (other.getCreatedAt() == null) {
+			return -1;
+		}
+		return getCreatedAt().compareTo(other.getCreatedAt());
 	}
 }

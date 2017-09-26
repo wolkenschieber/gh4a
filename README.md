@@ -1,12 +1,12 @@
+<img alt="Octodroid" align="right" src="https://raw.githubusercontent.com/wolkenschieber/gh4a/master/app/src/main/res/drawable-xxhdpi/octodroid.png">
+
 OctoDroid
 =========
 This application provides access to [GitHub](https://github.com/) and lets you stay connected with your network
 
-![Octodroid](https://raw.githubusercontent.com/wolkenschieber/gh4a/master/app/src/main/res/drawable-xxhdpi/octodroid.png)
-
 Download
 --------
-[![Download OctoDroid from Google Play](http://www.android.com/images/brand/android_app_on_play_large.png)](https://play.google.com/store/apps/details?id=com.gh4a) [![Download OctoDroid from F-Droid.org](https://raw.githubusercontent.com/kageiit/images-host/master/badges/fdroid-badge.png)](https://f-droid.org/packages/com.gh4a/)
+[![Download OctoDroid from Google Play](http://www.android.com/images/brand/android_app_on_play_large.png)](https://play.google.com/store/apps/details?id=com.gh4a) [![Download OctoDroid from F-Droid.org](https://i.imgur.com/um29KX1.png)](https://f-droid.org/packages/com.gh4a/)
 
 Main features
 -------------
@@ -59,7 +59,7 @@ Main features
 
 How to Build Octodroid
 ----------------------
-- Ensure Android SDK platform version 24 and build-tools version 24.0.0 are installed
+- Ensure Android SDK platform version 26 and build-tools version 26.0.1 are installed
 - Register an application for your OctoDroid usage under your [GitHub settings](https://github.com/settings/developers)
   * naming is up to you
   * callback URL must be gh4a://oauth

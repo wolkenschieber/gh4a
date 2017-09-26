@@ -23,7 +23,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.gh4a.BackgroundTask;
-import com.gh4a.BasePagerActivity;
+import com.gh4a.BaseFragmentPagerActivity;
 import com.gh4a.Gh4Application;
 import com.gh4a.R;
 import com.gh4a.db.BookmarksProvider;
@@ -54,7 +54,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-public class RepositoryActivity extends BasePagerActivity {
+public class RepositoryActivity extends BaseFragmentPagerActivity {
     public static Intent makeIntent(Context context, Repository repo) {
         return makeIntent(context, repo, null);
     }
@@ -362,7 +362,7 @@ public class RepositoryActivity extends BasePagerActivity {
             if (bookmarkAction != null) {
                 bookmarkAction.setTitle(BookmarksProvider.hasBookmarked(this, getBookmarkUrl())
                         ? R.string.remove_bookmark
-                        : R.string.bookmark_repo);
+                        : R.string.bookmark);
             }
         }
 
@@ -525,8 +525,8 @@ public class RepositoryActivity extends BasePagerActivity {
             if (convertView == null) {
                 convertView = mInflater.inflate(R.layout.row_branch, parent, false);
             }
-            ImageView icon = (ImageView) convertView.findViewById(R.id.icon);
-            TextView title = (TextView) convertView.findViewById(R.id.title);
+            ImageView icon = convertView.findViewById(R.id.icon);
+            TextView title = convertView.findViewById(R.id.title);
 
             icon.setImageResource(mItems.get(position) instanceof RepositoryTag
                     ? mTagDrawableResId : mBranchDrawableResId);

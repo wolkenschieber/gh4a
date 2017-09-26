@@ -104,12 +104,12 @@ public class ReactionBar extends LinearLayout implements View.OnClickListener {
         setOrientation(HORIZONTAL);
         inflate(context, R.layout.reaction_bar, this);
 
-        mPlusOneView = (TextView) findViewById(R.id.plus_one);
-        mMinusOneView = (TextView) findViewById(R.id.minus_one);
-        mLaughView = (TextView) findViewById(R.id.laugh);
-        mHoorayView = (TextView) findViewById(R.id.hooray);
-        mConfusedView = (TextView) findViewById(R.id.confused);
-        mHeartView = (TextView) findViewById(R.id.heart);
+        mPlusOneView = findViewById(R.id.plus_one);
+        mMinusOneView = findViewById(R.id.minus_one);
+        mLaughView = findViewById(R.id.laugh);
+        mHoorayView = findViewById(R.id.hooray);
+        mConfusedView = findViewById(R.id.confused);
+        mHeartView = findViewById(R.id.heart);
         mReactButton = findViewById(R.id.react);
 
         setReactions(null);
@@ -357,8 +357,8 @@ public class ReactionBar extends LinearLayout implements View.OnClickListener {
             }
 
             if (viewType == 0) {
-                ImageView avatar = (ImageView) convertView.findViewById(R.id.avatar);
-                TextView name = (TextView) convertView.findViewById(R.id.name);
+                ImageView avatar = convertView.findViewById(R.id.avatar);
+                TextView name = convertView.findViewById(R.id.name);
                 String ownLogin = Gh4Application.get().getAuthLogin();
                 User user = mUsers.get(position);
 
@@ -428,7 +428,9 @@ public class ReactionBar extends LinearLayout implements View.OnClickListener {
 
         @Override
         protected void onPostExecute(List<Reaction> reactions) {
-            mDetailsCache.putEntry(mItem, reactions);
+            if (reactions != null) {
+                mDetailsCache.putEntry(mItem, reactions);
+            }
             super.onPostExecute(reactions);
         }
     }
@@ -628,11 +630,16 @@ public class ReactionBar extends LinearLayout implements View.OnClickListener {
         }
 
         private Listener mListener;
+        private boolean mDestroyed;
         private HashMap<Object, List<Reaction>> mMap = new HashMap<>();
 
         public ReactionDetailsCache(Listener listener) {
             super();
             mListener = listener;
+        }
+
+        public void destroy() {
+            mDestroyed = true;
         }
 
         public void clear() {
@@ -650,7 +657,7 @@ public class ReactionBar extends LinearLayout implements View.OnClickListener {
         public List<Reaction> putEntry(Item item, List<Reaction> value) {
             Object key = item.getCacheKey();
             List<Reaction> result = mMap.put(key, new ArrayList<>(value));
-            if (result != null) {
+            if (result != null && !mDestroyed) {
                 mListener.onReactionsUpdated(item, buildReactions(value));
             }
             return result;

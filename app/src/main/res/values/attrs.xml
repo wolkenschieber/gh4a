@@ -19,6 +19,11 @@
     <attr name="colorBreadcrumbBackground" format="color" />
     <attr name="colorWebViewBackground" format="color" />
     <attr name="colorScrollbarThumb" format="color" />
+    <attr name="colorDiffAddBackground" format="color" />
+    <attr name="colorDiffRemoveBackground" format="color" />
+    <attr name="colorDiffAddLineNumberBackground" format="color" />
+    <attr name="colorDiffRemoveLineNumberBackground" format="color" />
+    <attr name="colorIconForeground" format="color" />
 
     <attr name="sendIcon" format="reference" />
     <attr name="commentEditIcon" format="reference" />
@@ -86,6 +91,17 @@
     <attr name="reactionMinusOneIcon" format="reference" />
     <attr name="reactionPlusOneIcon" format="reference" />
     <attr name="dragHandleIcon" format="reference" />
+    <attr name="timelineEventApproved" format="reference" />
+    <attr name="timelineEventRequestedChanges" format="reference" />
+    <attr name="timelineEventReviewed" format="reference" />
+    <attr name="timelineEventBranchIcon" format="reference" />
+    <attr name="expandIcon" format="reference" />
+    <attr name="collapseIcon" format="reference" />
+    <attr name="saveIcon" format="reference" />
+    <attr name="dropDownArrowIcon" format="reference" />
+    <attr name="dropUpArrowIcon" format="reference" />
+
+    <attr name="maxHeight" format="dimension" />
 
     <declare-styleable name="LabelBadgeView">
         <attr name="badgeSize" format="dimension" />
@@ -93,7 +109,7 @@
     </declare-styleable>
 
     <declare-styleable name="StyleableTextView">
-        <attr name="font" format="enum">
+        <attr name="ghFont" format="enum">
             <enum name="regular" value="0" />
             <enum name="medium" value="1" />
             <enum name="bold" value="2" />
@@ -107,6 +123,18 @@
     <declare-styleable name="IssueStateTrackingFloatingActionButton">
         <attr name="state_closed" format="boolean" />
         <attr name="state_merged" format="boolean" />
+    </declare-styleable>
+
+    <declare-styleable name="HeightLimitedLinearLayout">
+        <attr name="maxHeight" />
+    </declare-styleable>
+
+    <declare-styleable name="HeightLimitedNestedScrollView">
+        <attr name="maxHeight" />
+    </declare-styleable>
+
+    <declare-styleable name="EditorBottomSheet">
+        <attr name="collapsible" format="boolean" />
     </declare-styleable>
 
     <item name="EdgeColorHelper" type="id" />

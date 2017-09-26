@@ -80,7 +80,7 @@ public class Github4AndroidActivity extends BaseActivity implements View.OnClick
         } else {
             setContentView(R.layout.main);
 
-            AppBarLayout abl = (AppBarLayout) findViewById(R.id.header);
+            AppBarLayout abl = findViewById(R.id.header);
             abl.setEnabled(false);
 
             FrameLayout contentContainer = (FrameLayout) findViewById(R.id.content).getParent();
@@ -261,7 +261,7 @@ public class Github4AndroidActivity extends BaseActivity implements View.OnClick
         @Override
         protected void onError(Exception e) {
             super.onError(e);
-            setErrorViewVisibility(true);
+            setErrorViewVisibility(true, e);
         }
 
         @Override

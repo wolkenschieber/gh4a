@@ -23,7 +23,10 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.support.annotation.StringRes;
+import android.support.design.widget.AppBarLayout;
 import android.support.design.widget.CoordinatorLayout;
+import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentManager;
 import android.support.v4.content.Loader;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.AlertDialog;
@@ -47,6 +50,7 @@ import com.gh4a.loader.LoaderResult;
 import com.gh4a.utils.ApiHelpers;
 import com.gh4a.utils.IntentUtils;
 import com.gh4a.utils.UiUtils;
+import com.gh4a.widget.BottomSheetCompatibleScrollingViewBehavior;
 import com.gh4a.widget.IssueStateTrackingFloatingActionButton;
 
 import org.eclipse.egit.github.core.Issue;
@@ -135,6 +139,11 @@ public class IssueActivity extends BaseActivity implements View.OnClickListener 
     }
 
     @Override
+    protected AppBarLayout.ScrollingViewBehavior onCreateSwipeLayoutBehavior() {
+        return new BottomSheetCompatibleScrollingViewBehavior();
+    }
+
+    @Override
     protected void onInitExtras(Bundle extras) {
         super.onInitExtras(extras);
         mRepoOwner = extras.getString("owner");
@@ -148,9 +157,15 @@ public class IssueActivity extends BaseActivity implements View.OnClickListener 
         if (mIssue == null || mIsCollaborator == null) {
             return;
         }
-        setFragment(IssueFragment.newInstance(mRepoOwner, mRepoName,
-                mIssue, mIsCollaborator, mInitialComment));
-        getSupportFragmentManager().beginTransaction()
+        FragmentManager fm = getSupportFragmentManager();
+        IssueFragment newFragment = IssueFragment.newInstance(mRepoOwner, mRepoName,
+                mIssue, mIsCollaborator, mInitialComment);
+        if (mFragment != null) {
+            Fragment.SavedState state = fm.saveFragmentInstanceState(mFragment);
+            newFragment.setInitialSavedState(state);
+        }
+        setFragment(newFragment);
+        fm.beginTransaction()
                 .replace(R.id.details, mFragment)
                 .commitAllowingStateLoss();
         mInitialComment = null;
@@ -166,7 +181,7 @@ public class IssueActivity extends BaseActivity implements View.OnClickListener 
     }
 
     private void updateHeader() {
-        TextView tvState = (TextView) mHeader.findViewById(R.id.tv_state);
+        TextView tvState = mHeader.findViewById(R.id.tv_state);
         boolean closed = ApiHelpers.IssueState.CLOSED.equals(mIssue.getState());
         int stateTextResId = closed ? R.string.closed : R.string.open;
         int stateColorAttributeId = closed ? R.attr.colorIssueClosed : R.attr.colorIssueOpen;
@@ -175,7 +190,7 @@ public class IssueActivity extends BaseActivity implements View.OnClickListener 
         transitionHeaderToColor(stateColorAttributeId,
                 closed ? R.attr.colorIssueClosedDark : R.attr.colorIssueOpenDark);
 
-        TextView tvTitle = (TextView) mHeader.findViewById(R.id.tv_title);
+        TextView tvTitle = mHeader.findViewById(R.id.tv_title);
         tvTitle.setText(mIssue.getTitle());
 
         mHeader.setVisibility(View.VISIBLE);
@@ -266,6 +281,14 @@ public class IssueActivity extends BaseActivity implements View.OnClickListener 
         supportInvalidateOptionsMenu();
         forceLoaderReload(0, 1);
         super.onRefresh();
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (mFragment != null && mFragment.onBackPressed()) {
+            return;
+        }
+        super.onBackPressed();
     }
 
     private void showOpenCloseConfirmDialog(final boolean reopen) {

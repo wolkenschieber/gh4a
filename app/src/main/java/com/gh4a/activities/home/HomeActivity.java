@@ -26,7 +26,7 @@ import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
 
-import com.gh4a.BasePagerActivity;
+import com.gh4a.BaseFragmentPagerActivity;
 import com.gh4a.Gh4Application;
 import com.gh4a.R;
 import com.gh4a.activities.Github4AndroidActivity;
@@ -46,7 +46,7 @@ import com.gh4a.utils.UiUtils;
 
 import org.eclipse.egit.github.core.User;
 
-public class HomeActivity extends BasePagerActivity implements
+public class HomeActivity extends BaseFragmentPagerActivity implements
         View.OnClickListener, RepositoryListContainerFragment.Callback,
         NotificationListFragment.ParentCallback {
     private static final int REQUEST_SETTINGS = 10000;
@@ -186,7 +186,7 @@ public class HomeActivity extends BasePagerActivity implements
         if (mNotificationsMenuItem != null) {
             View actionView = MenuItemCompat.getActionView(mNotificationsMenuItem);
             mNotificationsIndicator =
-                    (ImageView) actionView.findViewById(R.id.notifications_indicator);
+                    actionView.findViewById(R.id.notifications_indicator);
             updateNotificationIndicator(mSelectedFactoryId);
         }
 
@@ -213,15 +213,15 @@ public class HomeActivity extends BasePagerActivity implements
     protected void configureLeftDrawerHeader(View header) {
         super.configureLeftDrawerHeader(header);
 
-        mAvatarView = (ImageView) header.findViewById(R.id.avatar);
-        mUserExtraView = (TextView) header.findViewById(R.id.user_extra);
+        mAvatarView = header.findViewById(R.id.avatar);
+        mUserExtraView = header.findViewById(R.id.user_extra);
 
-        TextView userNameView = (TextView) header.findViewById(R.id.user_name);
+        TextView userNameView = header.findViewById(R.id.user_name);
         userNameView.setText(mUserLogin);
 
         updateUserInfo();
 
-        mDrawerSwitcher = (ImageView) header.findViewById(R.id.switcher);
+        mDrawerSwitcher = header.findViewById(R.id.switcher);
         mDrawerSwitcher.setVisibility(View.VISIBLE);
 
         mDrawerSwitcher.setOnClickListener(this);
@@ -502,7 +502,7 @@ public class HomeActivity extends BasePagerActivity implements
         }
 
         mDrawerSwitcher.setImageResource(accountMode
-                ? R.drawable.drop_up_arrow : R.drawable.drop_down_arrow);
+                ? R.drawable.drop_up_arrow_white : R.drawable.drop_down_arrow_white);
         mDrawerInAccountMode = accountMode;
     }
 

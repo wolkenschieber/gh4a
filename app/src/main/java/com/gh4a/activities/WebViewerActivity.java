@@ -69,9 +69,9 @@ public abstract class WebViewerActivity extends BaseActivity implements
     private boolean mRenderingDone;
     private final Handler mHandler = new Handler();
 
-    private static final String DARK_CSS_THEME = "dark";
-    private static final String LIGHT_CSS_THEME = "light";
-    private static final String PRINT_CSS_THEME = "print";
+    public static final String DARK_CSS_THEME = "dark";
+    public static final String LIGHT_CSS_THEME = "light";
+    public static final String PRINT_CSS_THEME = "print";
 
     private static final ArrayList<String> sLanguagePlugins = new ArrayList<>();
 
@@ -185,7 +185,7 @@ public abstract class WebViewerActivity extends BaseActivity implements
     }
 
     private void setupWebView() {
-        mWebView = (WebView) findViewById(R.id.web_view);
+        mWebView = findViewById(R.id.web_view);
 
         WebSettings s = mWebView.getSettings();
         initWebViewSettings(s);
@@ -352,6 +352,10 @@ public abstract class WebViewerActivity extends BaseActivity implements
     }
 
     protected void handleUrlLoad(Uri uri) {
+        if ("file".equals(uri.getScheme())) {
+            // Opening that URL will trigger a FileUriExposedException in API 24+
+            return;
+        }
         //noinspection TryWithIdenticalCatches
         try {
             Intent intent = new Intent(Intent.ACTION_VIEW, uri);

@@ -1,6 +1,7 @@
 package com.gh4a.fragment;
 
 import android.content.Intent;
+import android.support.annotation.AttrRes;
 import android.support.v4.content.Loader;
 import android.view.View;
 import android.widget.TextView;
@@ -10,8 +11,8 @@ import com.gh4a.R;
 import com.gh4a.activities.EditIssueCommentActivity;
 import com.gh4a.activities.PullRequestActivity;
 import com.gh4a.loader.IssueCommentListLoader;
-import com.gh4a.loader.IssueEventHolder;
 import com.gh4a.loader.LoaderResult;
+import com.gh4a.loader.TimelineItem;
 import com.gh4a.utils.ApiHelpers;
 import com.gh4a.utils.IntentUtils;
 
@@ -38,7 +39,7 @@ public class IssueFragment extends IssueFragmentBase {
 
     @Override
     protected void bindSpecialViews(View headerView) {
-        TextView tvPull = (TextView) headerView.findViewById(R.id.tv_pull);
+        TextView tvPull = headerView.findViewById(R.id.tv_pull);
         if (mIssue.getPullRequest() != null && mIssue.getPullRequest().getDiffUrl() != null) {
             tvPull.setVisibility(View.VISIBLE);
             tvPull.setOnClickListener(this);
@@ -67,14 +68,16 @@ public class IssueFragment extends IssueFragmentBase {
     }
 
     @Override
-    public Loader<LoaderResult<List<IssueEventHolder>>> onCreateLoader() {
+    public Loader<LoaderResult<List<TimelineItem>>> onCreateLoader() {
         return new IssueCommentListLoader(getActivity(), mRepoOwner, mRepoName, mIssue.getNumber());
     }
 
     @Override
-    public void editComment(IssueEventHolder item) {
+    public void editComment(Comment comment) {
+        @AttrRes int highlightColorAttr = ApiHelpers.IssueState.CLOSED.equals(mIssue.getState())
+                ? R.attr.colorIssueClosed : R.attr.colorIssueOpen;
         Intent intent = EditIssueCommentActivity.makeIntent(getActivity(),
-                mRepoOwner, mRepoName, mIssue.getNumber(), item.comment);
+                mRepoOwner, mRepoName, mIssue.getNumber(), comment, highlightColorAttr);
         startActivityForResult(intent, REQUEST_EDIT);
     }
 
@@ -89,5 +92,10 @@ public class IssueFragment extends IssueFragmentBase {
     @Override
     public int getCommentEditorHintResId() {
         return R.string.issue_comment_hint;
+    }
+
+    @Override
+    public void replyToComment(long replyToId) {
+        // Not used in this screen
     }
 }

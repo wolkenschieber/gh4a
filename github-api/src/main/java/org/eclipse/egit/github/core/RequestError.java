@@ -28,6 +28,8 @@ public class RequestError implements Serializable {
 
 	private List<FieldError> errors;
 
+	private BlockReason block;
+
 	/**
 	 * @return message
 	 */
@@ -42,5 +44,12 @@ public class RequestError implements Serializable {
 	 */
 	public List<FieldError> getErrors() {
 		return errors;
+	}
+
+	/**
+	 * @return block
+	 */
+	public BlockReason getBlockReason() {
+		return block;
 	}
 }

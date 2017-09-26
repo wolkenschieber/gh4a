@@ -27,13 +27,10 @@ import android.support.v7.app.AlertDialog;
 import android.support.v7.widget.PopupMenu;
 import android.text.TextUtils;
 import android.util.SparseArray;
-import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
-import android.widget.EditText;
-import android.widget.TextView;
 
 import com.gh4a.Gh4Application;
 import com.gh4a.ProgressDialogTask;
@@ -44,7 +41,6 @@ import com.gh4a.utils.ApiHelpers;
 import com.gh4a.utils.FileUtils;
 import com.gh4a.utils.IntentUtils;
 import com.gh4a.utils.StringUtils;
-import com.gh4a.utils.UiUtils;
 import com.gh4a.widget.ReactionBar;
 
 import org.eclipse.egit.github.core.CommitComment;
@@ -54,8 +50,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public abstract class DiffViewerActivity extends WebViewerActivity implements
         ReactionBar.Callback, ReactionBar.ReactionDetailsCache.Listener {
@@ -76,8 +70,6 @@ public abstract class DiffViewerActivity extends WebViewerActivity implements
                 .putExtra("initial_comment", initialComment);
     }
 
-    private static final Pattern HUNK_START_PATTERN =
-            Pattern.compile("@@ -(\\d+),\\d+ \\+(\\d+),\\d+.*");
     private static final String COMMENT_ADD_URI_FORMAT =
             "comment://add?position=%d&l=%d&r=%d&isRightLine=%b";
     private static final String COMMENT_EDIT_URI_FORMAT =
@@ -116,6 +108,8 @@ public abstract class DiffViewerActivity extends WebViewerActivity implements
             + "A1.5,1.5 0 0,0 15.5,8A1.5,1.5 0 0,0 14,9.5A1.5,1.5 0 0,0 15.5,11M12,20"
             + "A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20M12,2"
             + "C6.47,2 2,6.5 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z";
+
+    protected static final int REQUEST_EDIT = 0;
 
     protected String mRepoOwner;
     protected String mRepoName;
@@ -180,6 +174,12 @@ public abstract class DiffViewerActivity extends WebViewerActivity implements
         } else {
             getSupportLoaderManager().initLoader(0, null, mCommentCallback);
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        mReactionDetailsCache.destroy();
+        super.onDestroy();
     }
 
     @Override
@@ -263,10 +263,10 @@ public abstract class DiffViewerActivity extends WebViewerActivity implements
             String line = mDiffLines[i];
             String cssClass = null;
             if (line.startsWith("@@")) {
-                Matcher matcher = HUNK_START_PATTERN.matcher(line);
-                if (matcher.matches()) {
-                    leftDiffPosition = Integer.parseInt(matcher.group(1)) - 1;
-                    rightDiffPosition = Integer.parseInt(matcher.group(2)) - 1;
+                int[] lineNumbers = StringUtils.extractDiffHunkLineNumbers(line);
+                if (lineNumbers != null) {
+                    leftDiffPosition = lineNumbers[0];
+                    rightDiffPosition = lineNumbers[1];
                 }
                 cssClass = "change";
             } else if (line.startsWith("+")) {
@@ -390,6 +390,17 @@ public abstract class DiffViewerActivity extends WebViewerActivity implements
         return super.onOptionsItemSelected(item);
     }
 
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQUEST_EDIT) {
+            if (resultCode == RESULT_OK) {
+                refresh();
+            }
+        } else {
+            super.onActivityResult(requestCode, resultCode, data);
+        }
+    }
+
     private void addCommentsToMap(List<CommitComment> comments) {
         for (CommitComment comment : comments) {
             if (!TextUtils.equals(comment.getPath(), mPath)) {
@@ -405,42 +416,6 @@ public abstract class DiffViewerActivity extends WebViewerActivity implements
         }
     }
 
-    private void openCommentDialog(final long id, final long replyToId, String line,
-            final int position, final int leftLine, final int rightLine) {
-        final boolean isEdit = id != 0L;
-        LayoutInflater inflater = LayoutInflater.from(this);
-        View commentDialog = inflater.inflate(R.layout.commit_comment_dialog, null);
-
-        final TextView code = (TextView) commentDialog.findViewById(R.id.line);
-        code.setText(line);
-
-        final EditText body = (EditText) commentDialog.findViewById(R.id.body);
-        if (isEdit) {
-            body.setText(mCommitComments.get(id).comment.getBody());
-        }
-
-        final int saveButtonResId = isEdit
-                ? R.string.issue_comment_update_title : R.string.issue_comment_title;
-        final DialogInterface.OnClickListener saveCb = new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                String text = body.getText().toString();
-                new CommentTask(id, replyToId, text, position).schedule();
-            }
-        };
-
-        AlertDialog d = new AlertDialog.Builder(this)
-                .setCancelable(true)
-                .setTitle(getString(R.string.commit_comment_dialog_title, leftLine, rightLine))
-                .setView(commentDialog)
-                .setPositiveButton(saveButtonResId, saveCb)
-                .setNegativeButton(R.string.cancel, null)
-                .show();
-
-        body.addTextChangedListener(new UiUtils.ButtonEnableTextWatcher(
-                body, d.getButton(DialogInterface.BUTTON_POSITIVE)));
-    }
-
     @Override
     protected void handleUrlLoad(Uri uri) {
         if (!uri.getScheme().equals("comment")) {
@@ -454,11 +429,10 @@ public abstract class DiffViewerActivity extends WebViewerActivity implements
         boolean isRightLine = Boolean.parseBoolean(uri.getQueryParameter("isRightLine"));
         String lineText = mDiffLines[line];
         String idParam = uri.getQueryParameter("id");
-        boolean isComment = idParam != null;
-        long id = isComment ? Long.parseLong(idParam) : 0L;
+        long id = idParam != null ? Long.parseLong(idParam) : 0L;
 
         CommentActionPopup p = new CommentActionPopup(id, line, lineText, leftLine, rightLine,
-                mLastTouchDown.x, mLastTouchDown.y, isComment, isRightLine);
+                mLastTouchDown.x, mLastTouchDown.y, isRightLine);
         p.show();
     }
 
@@ -470,8 +444,8 @@ public abstract class DiffViewerActivity extends WebViewerActivity implements
     }
 
     protected abstract Loader<LoaderResult<List<CommitComment>>> createCommentLoader();
-    protected abstract void createComment(CommitComment comment, long replyToCommentId) throws IOException;
-    protected abstract void editComment(CommitComment comment) throws IOException;
+    protected abstract void openCommentDialog(long id, long replyToId, String line,
+            int position, int leftLine, int rightLine, CommitComment commitComment);
     protected abstract void deleteComment(long id) throws IOException;
     protected abstract boolean canReply();
     protected abstract String createUrl(String lineId, long replyId);
@@ -491,8 +465,7 @@ public abstract class DiffViewerActivity extends WebViewerActivity implements
         private ReactionBar.AddReactionMenuHelper mReactionMenuHelper;
 
         public CommentActionPopup(long id, int position, String lineText,
-                int leftLine, int rightLine, int x, int y, boolean isComment,
-                boolean isRightLine) {
+                int leftLine, int rightLine, int x, int y, boolean isRightLine) {
             super(DiffViewerActivity.this, findViewById(R.id.popup_helper));
 
             mId = id;
@@ -507,15 +480,15 @@ public abstract class DiffViewerActivity extends WebViewerActivity implements
             String ownLogin = Gh4Application.get().getAuthLogin();
 
             getMenuInflater().inflate(R.menu.commit_comment_actions, menu);
-            if (!isComment || !canReply()) {
+            if (id == 0 || !canReply()) {
                 menu.removeItem(R.id.reply);
             }
-            if (!isComment || !ApiHelpers.loginEquals(comment.comment.getUser(), ownLogin)) {
+            if (id == 0|| !ApiHelpers.loginEquals(comment.comment.getUser(), ownLogin)) {
                 menu.removeItem(R.id.edit);
                 menu.removeItem(R.id.delete);
             }
 
-            if (isComment) {
+            if (id != 0) {
                 Menu reactionMenu = menu.findItem(R.id.react).getSubMenu();
                 getMenuInflater().inflate(R.menu.reaction_menu, reactionMenu);
 
@@ -552,13 +525,15 @@ public abstract class DiffViewerActivity extends WebViewerActivity implements
                             .show();
                     break;
                 case R.id.reply:
-                    openCommentDialog(0L, mId, mLineText, mPosition, mLeftLine, mRightLine);
+                    openCommentDialog(0L, mId, mLineText, mPosition, mLeftLine, mRightLine, null);
                     break;
                 case R.id.edit:
-                    openCommentDialog(mId, 0L, mLineText, mPosition, mLeftLine, mRightLine);
+                    CommitCommentWrapper wrapper = mCommitComments.get(mId);
+                    CommitComment comment = wrapper != null ? wrapper.comment : null;
+                    openCommentDialog(mId, 0L, mLineText, mPosition, mLeftLine, mRightLine, comment);
                     break;
                 case R.id.add_comment:
-                    openCommentDialog(0L, 0L, mLineText, mPosition, mLeftLine, mRightLine);
+                    openCommentDialog(0L, 0L, mLineText, mPosition, mLeftLine, mRightLine, null);
                     break;
                 case R.id.share:
                     String url = createUrl(createLineLinkId(mIsRightLine ? mRightLine : mLeftLine,
@@ -569,47 +544,6 @@ public abstract class DiffViewerActivity extends WebViewerActivity implements
                     break;
             }
             return true;
-        }
-    }
-
-    private class CommentTask extends ProgressDialogTask<Void> {
-        private final CommitComment mComment;
-        private final long mReplyToId;
-
-        public CommentTask(long id, long replyToId, String body, int position) {
-            super(DiffViewerActivity.this, R.string.saving_msg);
-            mComment = new CommitComment();
-            mComment.setBody(body);
-            mComment.setId(id);
-            mComment.setPosition(position);
-            mReplyToId = replyToId;
-        }
-
-        @Override
-        protected ProgressDialogTask<Void> clone() {
-            return new CommentTask(mComment.getId(), mReplyToId,
-                    mComment.getBody(), mComment.getPosition());
-        }
-
-        @Override
-        protected Void run() throws IOException {
-            if (mComment.getId() == 0L) {
-                createComment(mComment, mReplyToId);
-            } else {
-                editComment(mComment);
-            }
-            return null;
-        }
-
-        @Override
-        protected void onSuccess(Void result) {
-            refresh();
-            setResult(RESULT_OK);
-        }
-
-        @Override
-        protected String getErrorMessage() {
-            return getContext().getString(R.string.error_edit_commit_comment, mComment.getPosition());
         }
     }
 

@@ -22,6 +22,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.support.annotation.StringRes;
+import android.support.design.widget.AppBarLayout;
 import android.support.design.widget.CoordinatorLayout;
 import android.support.v4.app.Fragment;
 import android.support.v4.content.Loader;
@@ -38,7 +39,7 @@ import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.TextView;
 
-import com.gh4a.BasePagerActivity;
+import com.gh4a.BaseFragmentPagerActivity;
 import com.gh4a.Gh4Application;
 import com.gh4a.ProgressDialogTask;
 import com.gh4a.R;
@@ -50,23 +51,28 @@ import com.gh4a.loader.IssueLoader;
 import com.gh4a.loader.LoaderCallbacks;
 import com.gh4a.loader.LoaderResult;
 import com.gh4a.loader.PullRequestLoader;
+import com.gh4a.loader.ReferenceLoader;
 import com.gh4a.utils.ApiHelpers;
 import com.gh4a.utils.IntentUtils;
 import com.gh4a.utils.UiUtils;
+import com.gh4a.widget.BottomSheetCompatibleScrollingViewBehavior;
 import com.gh4a.widget.IssueStateTrackingFloatingActionButton;
 
 import org.eclipse.egit.github.core.Issue;
 import org.eclipse.egit.github.core.MergeStatus;
 import org.eclipse.egit.github.core.PullRequest;
 import org.eclipse.egit.github.core.PullRequestMarker;
+import org.eclipse.egit.github.core.Reference;
 import org.eclipse.egit.github.core.RepositoryId;
+import org.eclipse.egit.github.core.TypedResource;
 import org.eclipse.egit.github.core.User;
+import org.eclipse.egit.github.core.service.DataService;
 import org.eclipse.egit.github.core.service.PullRequestService;
 
 import java.io.IOException;
 import java.util.Locale;
 
-public class PullRequestActivity extends BasePagerActivity implements
+public class PullRequestActivity extends BaseFragmentPagerActivity implements
         View.OnClickListener, PullRequestFilesFragment.CommentUpdateListener {
     public static Intent makeIntent(Context context, String repoOwner, String repoName, int number) {
         return makeIntent(context, repoOwner, repoName, number, -1, null);
@@ -98,6 +104,8 @@ public class PullRequestActivity extends BasePagerActivity implements
     private PullRequest mPullRequest;
     private PullRequestFragment mPullRequestFragment;
     private IssueStateTrackingFloatingActionButton mEditFab;
+    private Reference mHeadReference;
+    private boolean mHasLoadedHeadReference;
 
     private ViewGroup mHeader;
     private int[] mHeaderColorAttrs;
@@ -134,6 +142,7 @@ public class PullRequestActivity extends BasePagerActivity implements
             fillHeader();
             showContentIfReady();
             supportInvalidateOptionsMenu();
+            getSupportLoaderManager().initLoader(3, null, mHeadReferenceCallback);
         }
     };
 
@@ -165,6 +174,21 @@ public class PullRequestActivity extends BasePagerActivity implements
         }
     };
 
+    private final LoaderCallbacks<Reference> mHeadReferenceCallback = new LoaderCallbacks<Reference>(this) {
+        @Override
+        protected Loader<LoaderResult<Reference>> onCreateLoader() {
+            return new ReferenceLoader(PullRequestActivity.this, mPullRequest);
+        }
+
+        @Override
+        protected void onResultReady(Reference result) {
+            mHeadReference = result;
+            mHasLoadedHeadReference = true;
+            supportInvalidateOptionsMenu();
+            getSupportLoaderManager().destroyLoader(3);
+        }
+    };
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -173,7 +197,7 @@ public class PullRequestActivity extends BasePagerActivity implements
         mHeader = (ViewGroup) inflater.inflate(R.layout.issue_header, null);
         mHeader.setClickable(false);
         mHeader.setVisibility(View.GONE);
-        addHeaderView(mHeader, true);
+        addHeaderView(mHeader, !hasTabsInToolbar());
 
         ActionBar actionBar = getSupportActionBar();
         actionBar.setTitle(getResources().getString(R.string.pull_request_title) + " #" + mPullRequestNumber);
@@ -185,6 +209,11 @@ public class PullRequestActivity extends BasePagerActivity implements
         getSupportLoaderManager().initLoader(0, null, mPullRequestCallback);
         getSupportLoaderManager().initLoader(1, null, mIssueCallback);
         getSupportLoaderManager().initLoader(2, null, mCollaboratorCallback);
+    }
+
+    @Override
+    protected AppBarLayout.ScrollingViewBehavior onCreateSwipeLayoutBehavior() {
+        return new BottomSheetCompatibleScrollingViewBehavior();
     }
 
     @Override
@@ -219,8 +248,20 @@ public class PullRequestActivity extends BasePagerActivity implements
             MenuItem mergeItem = menu.findItem(R.id.pull_merge);
             mergeItem.setEnabled(false);
         }
+
         if (mPullRequest == null) {
+            menu.removeItem(R.id.share);
             menu.removeItem(R.id.browser);
+        }
+
+        if (mPullRequest == null || mPullRequest.getHead().getRepo() == null) {
+            menu.removeItem(R.id.delete_branch);
+        } else {
+            MenuItem deleteBranchItem = menu.findItem(R.id.delete_branch);
+            deleteBranchItem.setVisible(mHasLoadedHeadReference);
+            if (mHeadReference == null) {
+                deleteBranchItem.setTitle(R.string.restore_branch);
+            }
         }
 
         return super.onCreateOptionsMenu(menu);
@@ -243,6 +284,9 @@ public class PullRequestActivity extends BasePagerActivity implements
                 break;
             case R.id.browser:
                 IntentUtils.launchBrowser(this, Uri.parse(mPullRequest.getHtmlUrl()));
+                break;
+            case R.id.delete_branch:
+                showDeleteRestoreBranchConfirmDialog(mHeadReference == null);
                 break;
         }
         return super.onOptionsItemSelected(item);
@@ -277,6 +321,8 @@ public class PullRequestActivity extends BasePagerActivity implements
         mIssue = null;
         mPullRequest = null;
         mIsCollaborator = null;
+        mHeadReference = null;
+        mHasLoadedHeadReference = false;
         setContentShown(false);
         if (mEditFab != null) {
             mEditFab.post(new Runnable() {
@@ -288,7 +334,7 @@ public class PullRequestActivity extends BasePagerActivity implements
         }
         mHeader.setVisibility(View.GONE);
         mHeaderColorAttrs = null;
-        forceLoaderReload(0, 1, 2);
+        forceLoaderReload(0, 1, 2, 3);
         invalidateTabs();
         super.onRefresh();
     }
@@ -333,6 +379,11 @@ public class PullRequestActivity extends BasePagerActivity implements
         if (f == mPullRequestFragment) {
             mPullRequestFragment = null;
         }
+    }
+
+    @Override
+    protected boolean fragmentNeedsRefresh(Fragment object) {
+        return true;
     }
 
     @Override
@@ -392,13 +443,33 @@ public class PullRequestActivity extends BasePagerActivity implements
                 .show();
     }
 
+    private void showDeleteRestoreBranchConfirmDialog(final boolean restore) {
+        int message = restore ? R.string.restore_branch_question : R.string.delete_branch_question;
+        int buttonText = restore ? R.string.restore : R.string.delete;
+        new AlertDialog.Builder(this)
+                .setMessage(message)
+                .setIconAttribute(android.R.attr.alertDialogIcon)
+                .setPositiveButton(buttonText, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        if (restore) {
+                            new RestoreBranchTask().schedule();
+                        } else {
+                            new DeleteBranchTask().schedule();
+                        }
+                    }
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
     private void showMergeDialog() {
         LayoutInflater inflater = LayoutInflater.from(this);
         String title = getString(R.string.pull_message_dialog_title, mPullRequest.getNumber());
         View view = inflater.inflate(R.layout.pull_merge_message_dialog, null);
 
         final View editorNotice = view.findViewById(R.id.notice);
-        final EditText editor = (EditText) view.findViewById(R.id.et_commit_message);
+        final EditText editor = view.findViewById(R.id.et_commit_message);
         editor.setText(mPullRequest.getTitle());
 
         final ArrayAdapter<MergeMethodDesc> adapter = new ArrayAdapter<>(this,
@@ -410,7 +481,7 @@ public class PullRequestActivity extends BasePagerActivity implements
         adapter.add(new MergeMethodDesc(R.string.pull_merge_method_rebase,
                 PullRequestService.MERGE_METHOD_REBASE));
 
-        final Spinner mergeMethod = (Spinner) view.findViewById(R.id.merge_method);
+        final Spinner mergeMethod = view.findViewById(R.id.merge_method);
         mergeMethod.setAdapter(adapter);
         mergeMethod.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
@@ -441,16 +512,6 @@ public class PullRequestActivity extends BasePagerActivity implements
                 .show();
     }
 
-    private void updateTabRightMargin(int dimensionResId) {
-        int margin = dimensionResId != 0
-                ? getResources().getDimensionPixelSize(dimensionResId) : 0;
-
-        View tabs = findViewById(R.id.tabs);
-        ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) tabs.getLayoutParams();
-        lp.rightMargin = margin;
-        tabs.setLayoutParams(lp);
-    }
-
     private void updateFabVisibility() {
         boolean isIssueOwner = mIssue != null
                 && ApiHelpers.loginEquals(mIssue.getUser(), Gh4Application.get().getAuthLogin());
@@ -464,10 +525,10 @@ public class PullRequestActivity extends BasePagerActivity implements
                     getLayoutInflater().inflate(R.layout.issue_edit_fab, rootLayout, false);
             mEditFab.setOnClickListener(this);
             rootLayout.addView(mEditFab);
-            updateTabRightMargin(R.dimen.mini_fab_size_with_margin);
+            adjustTabsForHeaderAlignedFab(true);
         } else if (!shouldHaveFab && mEditFab != null) {
             rootLayout.removeView(mEditFab);
-            updateTabRightMargin(0);
+            adjustTabsForHeaderAlignedFab(false);
             mEditFab = null;
         }
         if (mEditFab != null) {
@@ -496,10 +557,10 @@ public class PullRequestActivity extends BasePagerActivity implements
             };
         }
 
-        TextView tvState = (TextView) mHeader.findViewById(R.id.tv_state);
+        TextView tvState = mHeader.findViewById(R.id.tv_state);
         tvState.setText(getString(stateTextResId).toUpperCase(Locale.getDefault()));
 
-        TextView tvTitle = (TextView) mHeader.findViewById(R.id.tv_title);
+        TextView tvTitle = mHeader.findViewById(R.id.tv_title);
         tvTitle.setText(mPullRequest.getTitle());
 
         mHeader.setVisibility(View.VISIBLE);
@@ -521,6 +582,89 @@ public class PullRequestActivity extends BasePagerActivity implements
         updateFabVisibility();
         transitionHeaderToColor(mHeaderColorAttrs[0], mHeaderColorAttrs[1]);
         supportInvalidateOptionsMenu();
+    }
+
+    private class RestoreBranchTask extends ProgressDialogTask<Reference> {
+        public RestoreBranchTask() {
+            super(getBaseActivity(), R.string.saving_msg);
+        }
+
+        @Override
+        protected ProgressDialogTask<Reference> clone() {
+            return new RestoreBranchTask();
+        }
+
+        @Override
+        protected Reference run() throws Exception {
+            DataService dataService =
+                    (DataService) Gh4Application.get().getService(Gh4Application.DATA_SERVICE);
+
+            PullRequestMarker head = mPullRequest.getHead();
+            if (head.getRepo() == null) {
+                return null;
+            }
+            String owner = head.getRepo().getOwner().getLogin();
+            String repo = head.getRepo().getName();
+            RepositoryId repoId = new RepositoryId(owner, repo);
+
+            Reference reference = new Reference();
+            reference.setRef("refs/heads/" + head.getRef());
+            TypedResource object = new TypedResource();
+            object.setSha(head.getSha());
+            reference.setObject(object);
+
+            return dataService.createReference(repoId, reference);
+        }
+
+        @Override
+        protected void onSuccess(Reference result) {
+            mHeadReference = result;
+            handlePullRequestUpdate();
+        }
+
+        @Override
+        protected String getErrorMessage() {
+            return getString(R.string.restore_branch_error);
+        }
+    }
+
+    private class DeleteBranchTask extends ProgressDialogTask<Void> {
+        public DeleteBranchTask() {
+            super(getBaseActivity(), R.string.deleting_msg);
+        }
+
+        @Override
+        protected ProgressDialogTask<Void> clone() {
+            return new DeleteBranchTask();
+        }
+
+        @Override
+        protected Void run() throws Exception {
+            DataService dataService =
+                    (DataService) Gh4Application.get().getService(Gh4Application.DATA_SERVICE);
+
+            PullRequestMarker head = mPullRequest.getHead();
+            String owner = head.getRepo().getOwner().getLogin();
+            String repo = head.getRepo().getName();
+            RepositoryId repoId = new RepositoryId(owner, repo);
+
+            Reference reference = new Reference();
+            reference.setRef("heads/" + head.getRef());
+
+            dataService.deleteReference(repoId, reference);
+            return null;
+        }
+
+        @Override
+        protected void onSuccess(Void result) {
+            mHeadReference = null;
+            handlePullRequestUpdate();
+        }
+
+        @Override
+        protected String getErrorMessage() {
+            return getString(R.string.delete_branch_error);
+        }
     }
 
     private class PullRequestOpenCloseTask extends ProgressDialogTask<PullRequest> {

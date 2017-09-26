@@ -229,7 +229,7 @@ public class UiUtils {
 
     public static Dialog createProgressDialog(Context context, @StringRes int messageResId) {
         View content = LayoutInflater.from(context).inflate(R.layout.progress_dialog, null);
-        TextView message = (TextView) content.findViewById(R.id.message);
+        TextView message = content.findViewById(R.id.message);
 
         message.setText(messageResId);
         return new AlertDialog.Builder(context)
@@ -381,6 +381,21 @@ public class UiUtils {
         return view.getText().subSequence(min, max);
     }
 
+    public static void replaceSelectionText(EditText view, CharSequence text) {
+        int min = 0;
+        int max = view.length();
+
+        if (view.isFocused()) {
+            int selectionStart = view.getSelectionStart();
+            int selectionEnd = view.getSelectionEnd();
+
+            min = Math.max(0, Math.min(selectionStart, selectionEnd));
+            max = Math.max(0, Math.max(selectionStart, selectionEnd));
+        }
+
+        view.getText().replace(min, max, text);
+    }
+
     public static abstract class QuoteActionModeCallback implements ActionMode.Callback {
         private final TextView mView;
 
@@ -458,5 +473,24 @@ public class UiUtils {
             builder.setSpan(span, pos, pos + label.getName().length(), 0);
         }
         return builder;
+    }
+
+    public static int limitViewHeight(int heightMeasureSpec, int maxHeight) {
+        int heightSize = View.MeasureSpec.getSize(heightMeasureSpec);
+        int heightMode = View.MeasureSpec.getMode(heightMeasureSpec);
+
+        switch (heightMode) {
+            case View.MeasureSpec.AT_MOST:
+            case View.MeasureSpec.EXACTLY:
+                heightMeasureSpec = View.MeasureSpec.makeMeasureSpec(
+                        Math.min(heightSize, maxHeight), heightMode);
+                break;
+            case View.MeasureSpec.UNSPECIFIED:
+                heightMeasureSpec =
+                        View.MeasureSpec.makeMeasureSpec(maxHeight, View.MeasureSpec.AT_MOST);
+                break;
+        }
+
+        return heightMeasureSpec;
     }
 }

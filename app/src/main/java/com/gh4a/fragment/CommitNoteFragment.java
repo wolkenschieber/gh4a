@@ -4,7 +4,7 @@ import android.app.Activity;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.os.Bundle;
-import android.support.v4.app.FragmentManager;
+import android.support.design.widget.CoordinatorLayout;
 import android.support.v4.content.Loader;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.widget.RecyclerView;
@@ -23,6 +23,7 @@ import com.gh4a.adapter.RootAdapter;
 import com.gh4a.loader.CommitCommentListLoader;
 import com.gh4a.loader.LoaderResult;
 import com.gh4a.utils.IntentUtils;
+import com.gh4a.widget.EditorBottomSheet;
 
 import org.eclipse.egit.github.core.CommitComment;
 import org.eclipse.egit.github.core.RepositoryCommit;
@@ -36,7 +37,9 @@ import java.util.List;
 import java.util.Set;
 
 public class CommitNoteFragment extends ListDataBaseFragment<CommitComment> implements
-        CommitNoteAdapter.OnCommentAction<CommitComment>, CommentBoxFragment.Callback {
+        CommitNoteAdapter.OnCommentAction<CommitComment>,
+        EditorBottomSheet.Callback, EditorBottomSheet.Listener {
+
     public static CommitNoteFragment newInstance(String repoOwner, String repoName,
             String commitSha, RepositoryCommit commit,
             List<CommitComment> allComments, IntentUtils.InitialCommentMarker initialComment) {
@@ -54,7 +57,8 @@ public class CommitNoteFragment extends ListDataBaseFragment<CommitComment> impl
         args.putString("owner", repoOwner);
         args.putString("repo", repoName);
         args.putString("sha", commitSha);
-        args.putSerializable("commit", commit);
+        args.putSerializable("commit_author", commit.getAuthor());
+        args.putSerializable("committer", commit.getCommitter());
         args.putSerializable("comments", comments);
         args.putParcelable("initial_comment", initialComment);
 
@@ -71,11 +75,12 @@ public class CommitNoteFragment extends ListDataBaseFragment<CommitComment> impl
     private String mRepoOwner;
     private String mRepoName;
     private String mObjectSha;
-    private RepositoryCommit mCommit;
+    private User mCommitAuthor;
+    private User mCommitter;
     private IntentUtils.InitialCommentMarker mInitialComment;
 
     private CommitNoteAdapter mAdapter;
-    private CommentBoxFragment mCommentFragment;
+    private EditorBottomSheet mBottomSheet;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -84,7 +89,8 @@ public class CommitNoteFragment extends ListDataBaseFragment<CommitComment> impl
         mRepoOwner = args.getString("owner");
         mRepoName = args.getString("repo");
         mObjectSha = args.getString("sha");
-        mCommit = (RepositoryCommit) args.getSerializable("commit");
+        mCommitAuthor = (User) args.getSerializable("commit_author");
+        mCommitter = (User) args.getSerializable("committer");
         mInitialComment = args.getParcelable("initial_comment");
         args.remove("initial_comment");
     }
@@ -92,16 +98,35 @@ public class CommitNoteFragment extends ListDataBaseFragment<CommitComment> impl
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View listContent = super.onCreateView(inflater, container, savedInstanceState);
-        View v = inflater.inflate(R.layout.commit_comment_list, container, false);
+        View v = inflater.inflate(R.layout.comment_list, container, false);
 
-        FrameLayout listContainer = (FrameLayout) v.findViewById(R.id.list_container);
+        FrameLayout listContainer = v.findViewById(R.id.list_container);
         listContainer.addView(listContent);
 
+        mBottomSheet = v.findViewById(R.id.bottom_sheet);
+        mBottomSheet.setCallback(this);
+        mBottomSheet.setResizingView(listContainer);
+        mBottomSheet.setListener(this);
+
         if (!Gh4Application.get().isAuthorized()) {
-            v.findViewById(R.id.comment_box).setVisibility(View.GONE);
+            mBottomSheet.setVisibility(View.GONE);
         }
 
         return v;
+    }
+
+    @Override
+    public void onViewCreated(View view, Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+        getBaseActivity().addAppBarOffsetListener(mBottomSheet);
+        mBottomSheet.post(new Runnable() {
+            @Override
+            public void run() {
+                // Fix an issue where the bottom sheet is initially located outside of the visible
+                // screen area
+                mBottomSheet.resetPeekHeight(getBaseActivity().getAppBarTotalScrollRange());
+            }
+        });
     }
 
     @Override
@@ -111,14 +136,8 @@ public class CommitNoteFragment extends ListDataBaseFragment<CommitComment> impl
             mAdapter.destroy();
             mAdapter = null;
         }
-    }
 
-    @Override
-    public void onActivityCreated(Bundle savedInstanceState) {
-        super.onActivityCreated(savedInstanceState);
-
-        FragmentManager fm = getChildFragmentManager();
-        mCommentFragment = (CommentBoxFragment) fm.findFragmentById(R.id.comment_box);
+        getBaseActivity().removeAppBarOffsetListener(mBottomSheet);
     }
 
     @Override
@@ -135,10 +154,39 @@ public class CommitNoteFragment extends ListDataBaseFragment<CommitComment> impl
 
     @Override
     public boolean canChildScrollUp() {
-        if (mCommentFragment != null && mCommentFragment.canChildScrollUp()) {
+        return (mBottomSheet != null && mBottomSheet.isExpanded()) || super.canChildScrollUp();
+    }
+
+    @Override
+    public CoordinatorLayout getRootLayout() {
+        return getBaseActivity().getRootLayout();
+    }
+
+    @Override
+    public boolean onBackPressed() {
+        if (mBottomSheet != null && mBottomSheet.isInAdvancedMode()) {
+            mBottomSheet.setAdvancedMode(false);
             return true;
         }
-        return super.canChildScrollUp();
+        return false;
+    }
+
+    @Override
+    public void onToggleAdvancedMode(boolean advancedMode) {
+        getBaseActivity().collapseAppBar();
+        getBaseActivity().setAppBarLocked(advancedMode);
+        mBottomSheet.resetPeekHeight(0);
+    }
+
+    @Override
+    public void onScrollingInBasicEditor(boolean scrolling) {
+        getBaseActivity().setAppBarLocked(scrolling);
+    }
+
+    @Override
+    protected void setHighlightColors(int colorAttrId, int statusBarColorAttrId) {
+        super.setHighlightColors(colorAttrId, statusBarColorAttrId);
+        mBottomSheet.setHighlightColor(colorAttrId);
     }
 
     @Override
@@ -151,13 +199,13 @@ public class CommitNoteFragment extends ListDataBaseFragment<CommitComment> impl
     protected void onAddData(RootAdapter<CommitComment, ?> adapter, List<CommitComment> data) {
         super.onAddData(adapter, data);
         Set<User> users = mAdapter.getUsers();
-        if (mCommit.getAuthor() != null) {
-            users.add(mCommit.getAuthor());
+        if (mCommitAuthor != null) {
+            users.add(mCommitAuthor);
         }
-        if (mCommit.getCommitter() != null) {
-            users.add(mCommit.getCommitter());
+        if (mCommitter != null) {
+            users.add(mCommitter);
         }
-        mCommentFragment.setMentionUsers(users);
+        mBottomSheet.setMentionUsers(users);
 
         if (mInitialComment != null) {
             for (int i = 0; i < data.size(); i++) {
@@ -217,7 +265,7 @@ public class CommitNoteFragment extends ListDataBaseFragment<CommitComment> impl
 
     @Override
     public void quoteText(CharSequence text) {
-        mCommentFragment.addQuote(text);
+        mBottomSheet.addQuote(text);
     }
 
     @Override

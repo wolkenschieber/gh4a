@@ -19,6 +19,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.support.design.widget.AppBarLayout;
 import android.support.v4.app.Fragment;
 import android.support.v4.content.Loader;
 import android.support.v7.app.ActionBar;
@@ -26,7 +27,7 @@ import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 
-import com.gh4a.BasePagerActivity;
+import com.gh4a.BaseFragmentPagerActivity;
 import com.gh4a.R;
 import com.gh4a.fragment.CommitFragment;
 import com.gh4a.fragment.CommitNoteFragment;
@@ -35,13 +36,14 @@ import com.gh4a.loader.CommitLoader;
 import com.gh4a.loader.LoaderCallbacks;
 import com.gh4a.loader.LoaderResult;
 import com.gh4a.utils.IntentUtils;
+import com.gh4a.widget.BottomSheetCompatibleScrollingViewBehavior;
 
 import org.eclipse.egit.github.core.CommitComment;
 import org.eclipse.egit.github.core.RepositoryCommit;
 
 import java.util.List;
 
-public class CommitActivity extends BasePagerActivity implements
+public class CommitActivity extends BaseFragmentPagerActivity implements
         CommitFragment.CommentUpdateListener, CommitNoteFragment.CommentUpdateListener {
     public static Intent makeIntent(Context context, String repoOwner, String repoName, String sha) {
         return makeIntent(context, repoOwner, repoName, -1, sha, null);
@@ -105,17 +107,8 @@ public class CommitActivity extends BasePagerActivity implements
         @Override
         protected void onResultReady(List<CommitComment> result) {
             mComments = result;
-            boolean foundComment = false;
-            if (mInitialComment != null) {
-                for (CommitComment comment : result) {
-                    if (comment.getId() == mInitialComment.commentId) {
-                        foundComment = comment.getPosition() < 0;
-                        break;
-                    }
-                }
-                if (!foundComment) {
-                    mInitialComment = null;
-                }
+            if (result.isEmpty()) {
+                mInitialComment = null;
             }
             showContentIfReady();
         }
@@ -135,6 +128,11 @@ public class CommitActivity extends BasePagerActivity implements
 
         getSupportLoaderManager().initLoader(0, null, mCommitCallback);
         getSupportLoaderManager().initLoader(1, null, mCommentCallback);
+    }
+
+    @Override
+    protected AppBarLayout.ScrollingViewBehavior onCreateSwipeLayoutBehavior() {
+        return new BottomSheetCompatibleScrollingViewBehavior();
     }
 
     @Override
