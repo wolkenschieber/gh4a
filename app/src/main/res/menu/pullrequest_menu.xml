@@ -27,7 +27,8 @@
         app:showAsAction="never" />
 
     <item
-        android:id="@+id/delete_branch"
-        android:title="@string/delete_branch"
+        android:id="@+id/copy_number"
+        android:title="@string/copy_number"
         app:showAsAction="never" />
+
 </menu>

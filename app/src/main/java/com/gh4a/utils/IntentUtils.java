@@ -2,6 +2,8 @@ package com.gh4a.utils;
 
 
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -11,8 +13,6 @@ import android.net.Uri;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.support.customtabs.CustomTabsIntent;
-import android.support.v4.os.ParcelableCompat;
-import android.support.v4.os.ParcelableCompatCreatorCallbacks;
 import android.widget.Toast;
 
 import com.gh4a.R;
@@ -87,6 +87,13 @@ public class IntentUtils {
         shareIntent.putExtra(Intent.EXTRA_TEXT, url);
         context.startActivity(
                 Intent.createChooser(shareIntent, context.getString(R.string.share_title)));
+    }
+
+    public static void copyToClipboard(Context context, CharSequence label, CharSequence text) {
+        ClipboardManager clipboardManager =
+                (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+        ClipData clipData = ClipData.newPlainText(label, text);
+        clipboardManager.setPrimaryClip(clipData);
     }
 
     private static Intent createActivityChooserIntent(Context context, Intent intent, Uri uri) {
@@ -168,9 +175,14 @@ public class IntentUtils {
         }
 
         public static final Parcelable.Creator<InitialCommentMarker> CREATOR =
-                ParcelableCompat.newCreator(new ParcelableCompatCreatorCallbacks<InitialCommentMarker>() {
+                new Parcelable.ClassLoaderCreator<InitialCommentMarker>() {
             @Override
             public InitialCommentMarker createFromParcel(Parcel in, ClassLoader loader) {
+                return createFromParcel(in);
+            }
+
+            @Override
+            public InitialCommentMarker createFromParcel(Parcel in) {
                 long commentId = in.readLong();
                 long timeMillis = in.readLong();
                 return new InitialCommentMarker(commentId,
@@ -180,6 +192,6 @@ public class IntentUtils {
             public InitialCommentMarker[] newArray(int size) {
                 return new InitialCommentMarker[size];
             }
-        });
+        };
     }
 }

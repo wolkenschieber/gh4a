@@ -18,7 +18,6 @@ import android.support.annotation.NonNull;
 import android.support.annotation.StringRes;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
-import android.support.v4.view.ViewCompat;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.widget.RecyclerView;
 import android.text.Editable;
@@ -26,6 +25,7 @@ import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.TextWatcher;
 import android.text.method.LinkMovementMethod;
+import android.text.style.ForegroundColorSpan;
 import android.view.ActionMode;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
@@ -216,7 +216,7 @@ public class UiUtils {
         if (view == null) {
             return false;
         }
-        return ViewCompat.canScrollVertically(view, -1);
+        return view.canScrollVertically(-1);
     }
 
     public static Context makeHeaderThemedContext(Context context) {
@@ -350,7 +350,7 @@ public class UiUtils {
     }
 
     public static class ButtonEnableTextWatcher extends EmptinessWatchingTextWatcher {
-        private View mView;
+        private final View mView;
 
         public ButtonEnableTextWatcher(EditText editor, View view) {
             super(editor);
@@ -379,21 +379,6 @@ public class UiUtils {
         }
 
         return view.getText().subSequence(min, max);
-    }
-
-    public static void replaceSelectionText(EditText view, CharSequence text) {
-        int min = 0;
-        int max = view.length();
-
-        if (view.isFocused()) {
-            int selectionStart = view.getSelectionStart();
-            int selectionEnd = view.getSelectionEnd();
-
-            min = Math.max(0, Math.min(selectionStart, selectionEnd));
-            max = Math.max(0, Math.max(selectionStart, selectionEnd));
-        }
-
-        view.getText().replace(min, max, text);
     }
 
     public static abstract class QuoteActionModeCallback implements ActionMode.Callback {
@@ -492,5 +477,19 @@ public class UiUtils {
         }
 
         return heightMeasureSpec;
+    }
+
+    public static void setMenuItemText(Context context, MenuItem item, String title,
+            String subtitle) {
+        SpannableStringBuilder builder = new SpannableStringBuilder();
+        builder.append(title).append("\n");
+
+        int start = builder.length();
+        builder.append(subtitle);
+
+        int secondaryTextColor = UiUtils.resolveColor(context, android.R.attr.textColorSecondary);
+        builder.setSpan(new ForegroundColorSpan(secondaryTextColor), start, builder.length(), 0);
+
+        item.setTitle(builder);
     }
 }
