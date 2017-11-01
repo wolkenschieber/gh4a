@@ -94,11 +94,19 @@ public class RefPathDisambiguationTask extends UrlLoadTask {
 
     // returns ref, path
     private Pair<String, String> resolve() throws Exception {
+        // first check whether the path redirects to HEAD
+        if (mRefAndPath.startsWith("HEAD")) {
+            if (mRefAndPath.startsWith("HEAD/")) {
+                return Pair.create("HEAD", mRefAndPath.substring(5));
+            }
+            return Pair.create("HEAD", null);
+        }
+
         RepositoryService repoService = (RepositoryService)
                 Gh4Application.get().getService(Gh4Application.REPO_SERVICE);
         RepositoryId repo = new RepositoryId(mRepoOwner, mRepoName);
 
-        // try branches first
+        // then look for matching branches
         List<RepositoryBranch> branches = repoService.getBranches(repo);
         if (branches != null) {
             for (RepositoryBranch branch : branches) {
@@ -118,7 +126,7 @@ public class RefPathDisambiguationTask extends UrlLoadTask {
             return null;
         }
 
-        // and tags second
+        // and for tags after that
         List<RepositoryTag> tags = repoService.getTags(repo);
         if (tags != null) {
             for (RepositoryTag tag : tags) {

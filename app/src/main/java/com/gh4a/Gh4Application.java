@@ -23,7 +23,10 @@ import android.content.res.Configuration;
 import android.os.Build;
 import android.util.SparseArray;
 
+import com.evernote.android.job.JobManager;
 import com.gh4a.fragment.SettingsFragment;
+import com.gh4a.job.Gh4JobCreator;
+import com.gh4a.job.NotificationsJob;
 import com.gh4a.utils.CrashReportingHelper;
 
 import org.eclipse.egit.github.core.User;
@@ -158,6 +161,18 @@ public class Gh4Application extends Application implements OnSharedPreferenceCha
         mServices.put(STAR_SERVICE, new StarService(mClient));
         mServices.put(USER_SERVICE, new UserService(mClient));
         mServices.put(WATCHER_SERVICE, new WatcherService(mClient));
+
+        JobManager.create(this).addJobCreator(new Gh4JobCreator());
+        updateNotificationJob(prefs);
+    }
+
+    private void updateNotificationJob(SharedPreferences prefs) {
+        if (isAuthorized() && prefs.getBoolean(SettingsFragment.KEY_NOTIFICATIONS, false)) {
+            int intervalMinutes = prefs.getInt(SettingsFragment.KEY_NOTIFICATION_INTERVAL, 15);
+            NotificationsJob.scheduleJob(intervalMinutes);
+        } else {
+            NotificationsJob.cancelJob();
+        }
     }
 
     public GitHubService getService(String name) {
@@ -226,16 +241,19 @@ public class Gh4Application extends Application implements OnSharedPreferenceCha
     }
 
     public void addAccount(User user, String token) {
+        SharedPreferences prefs = getPrefs();
         String login = user.getLogin();
-        Set<String> logins = getPrefs().getStringSet(KEY_ALL_LOGINS, null);
+        Set<String> logins = prefs.getStringSet(KEY_ALL_LOGINS, null);
         logins.add(login);
 
-        getPrefs().edit()
+        prefs.edit()
                 .putString(KEY_ACTIVE_LOGIN, login)
                 .putStringSet(KEY_ALL_LOGINS, logins)
                 .putString(KEY_PREFIX_TOKEN + login, token)
                 .putInt(KEY_PREFIX_USER_ID + login, user.getId())
                 .apply();
+
+        updateNotificationJob(prefs);
     }
 
     public User getCurrentAccountInfoForAvatar() {
@@ -270,6 +288,8 @@ public class Gh4Application extends Application implements OnSharedPreferenceCha
                 .remove(KEY_PREFIX_TOKEN + login)
                 .remove(KEY_PREFIX_USER_ID + login)
                 .apply();
+
+        NotificationsJob.cancelJob();
     }
 
     private SharedPreferences getPrefs() {

@@ -529,4 +529,22 @@
         <item quantity="one">%1$s check</item>
         <item quantity="other">%1$s checks</item>
     </plurals>
+
+    <string name="channel_notifications_name">GitHub notifications</string>
+    <string name="channel_notifications_description">Notifications received from GitHub.</string>
+    <string name="unread_notifications_summary_title">Unread GitHub notifications</string>
+    <plurals name="unread_notifications_summary_text">
+        <item quantity="zero">No unread notifications</item>
+        <item quantity="one">One unread notification</item>
+        <item quantity="other">%1$d unread notifications</item>
+    </plurals>
+    <plurals name="notification">
+        <item quantity="one">1 notification</item>
+        <item quantity="other">%1$d notifications</item>
+    </plurals>
+    <string name="notification_subject_commit">Commit</string>
+    <string name="notification_subject_issue">Issue</string>
+    <string name="notification_subject_pr">PR</string>
+    <string name="notification_subject_release">Release</string>
+    <string name="notification_interval">Sync interval</string>
 </resources>

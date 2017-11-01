@@ -59,7 +59,7 @@ Main features
 
 How to Build Octodroid
 ----------------------
-- Ensure Android SDK platform version 26 and build-tools version 26.0.1 are installed
+- Ensure Android SDK platform version 26 and build-tools version 26.0.2 are installed
 - Register an application for your OctoDroid usage under your [GitHub settings](https://github.com/settings/developers)
   * naming is up to you
   * callback URL must be gh4a://oauth
@@ -84,6 +84,7 @@ ClientSecret="<CLIENT SECRET DISPLAYED IN APPLICATION SETTINGS>"
 Open Source Libraries
 ---------------------
 * [android-gif-drawable](https://github.com/koral--/android-gif-drawable)
+* [Android-Job](https://github.com/evernote/android-job)
 * [AndroidSVG](https://github.com/BigBadaboom/androidsvg)
 * [emoji-java](https://github.com/vdurmont/emoji-java)
 * [HoloColorPicker](https://github.com/LarsWerkman/HoloColorPicker)

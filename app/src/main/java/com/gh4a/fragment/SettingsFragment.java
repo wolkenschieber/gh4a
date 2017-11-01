@@ -10,6 +10,7 @@ import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatDialog;
 import android.support.v7.preference.Preference;
 import android.support.v7.preference.PreferenceFragmentCompat;
+import android.support.v7.preference.TwoStatePreference;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -20,6 +21,7 @@ import android.widget.TextView;
 import com.gh4a.Gh4Application;
 import com.gh4a.R;
 import com.gh4a.activities.IssueEditActivity;
+import com.gh4a.job.NotificationsJob;
 import com.gh4a.widget.IntegerListPreference;
 
 public class SettingsFragment extends PreferenceFragmentCompat implements
@@ -34,6 +36,8 @@ public class SettingsFragment extends PreferenceFragmentCompat implements
     public static final String KEY_START_PAGE = "start_page";
     public static final String KEY_TEXT_SIZE = "webview_initial_zoom";
     public static final String KEY_GIF_LOADING = "http_gif_load_mode";
+    public static final String KEY_NOTIFICATIONS = "notifications";
+    public static final String KEY_NOTIFICATION_INTERVAL = "notification_interval";
     private static final String KEY_ABOUT = "about";
     private static final String KEY_OPEN_SOURCE_COMPONENTS = "open_source_components";
 
@@ -41,6 +45,8 @@ public class SettingsFragment extends PreferenceFragmentCompat implements
     private IntegerListPreference mThemePref;
     private Preference mAboutPref;
     private Preference mOpenSourcePref;
+    private TwoStatePreference mNotificationsPref;
+    private IntegerListPreference mNotificationIntervalPref;
 
     @Override
     public void onAttach(Context context) {
@@ -70,12 +76,34 @@ public class SettingsFragment extends PreferenceFragmentCompat implements
 
         mOpenSourcePref = findPreference(KEY_OPEN_SOURCE_COMPONENTS);
         mOpenSourcePref.setOnPreferenceClickListener(this);
+
+        mNotificationsPref = (TwoStatePreference) findPreference(KEY_NOTIFICATIONS);
+        mNotificationsPref.setOnPreferenceChangeListener(this);
+
+        mNotificationIntervalPref =
+                (IntegerListPreference) findPreference(KEY_NOTIFICATION_INTERVAL);
+        mNotificationIntervalPref.setOnPreferenceChangeListener(this);
     }
 
     @Override
     public boolean onPreferenceChange(Preference pref, Object newValue) {
         if (pref == mThemePref) {
             mListener.onThemeChanged();
+            return true;
+        }
+        if (pref == mNotificationsPref) {
+            if ((boolean) newValue) {
+                NotificationsJob.createNotificationChannels(getActivity());
+                NotificationsJob.scheduleJob(Integer.valueOf(mNotificationIntervalPref.getValue()));
+            } else {
+                NotificationsJob.cancelJob();
+            }
+            return true;
+        }
+        if (pref == mNotificationIntervalPref) {
+            if (mNotificationsPref.isChecked()) {
+                NotificationsJob.scheduleJob(Integer.parseInt((String) newValue));
+            }
             return true;
         }
         return false;
@@ -178,7 +206,8 @@ public class SettingsFragment extends PreferenceFragmentCompat implements
             { "HoloColorPicker", "https://github.com/LarsWerkman/HoloColorPicker" },
             { "Material Design Icons", "https://github.com/google/material-design-icons" },
             { "PrettyTime", "https://github.com/ocpsoft/prettytime" },
-            { "SmoothProgressBar", "https://github.com/castorflex/SmoothProgressBar" }
+            { "SmoothProgressBar", "https://github.com/castorflex/SmoothProgressBar" },
+            { "Android-Job", "https://github.com/evernote/android-job" }
         };
 
         private final LayoutInflater mInflater;

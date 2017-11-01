@@ -20,6 +20,7 @@ import com.gh4a.R;
 import com.gh4a.activities.RepositoryActivity;
 import com.gh4a.adapter.NotificationAdapter;
 import com.gh4a.adapter.RootAdapter;
+import com.gh4a.job.NotificationsJob;
 import com.gh4a.loader.LoaderCallbacks;
 import com.gh4a.loader.LoaderResult;
 import com.gh4a.loader.NotificationHolder;
@@ -36,9 +37,13 @@ import org.eclipse.egit.github.core.service.NotificationService;
 
 import java.io.IOException;
 import java.util.Date;
+import java.util.List;
 
 public class NotificationListFragment extends LoadingListFragmentBase implements
         RootAdapter.OnItemClickListener<NotificationHolder>,NotificationAdapter.OnNotificationActionCallback {
+    public static final String EXTRA_INITIAL_REPO_OWNER = "initial_notification_repo_owner";
+    public static final String EXTRA_INITIAL_REPO_NAME = "initial_notification_repo_name";
+
     public static NotificationListFragment newInstance() {
         return new NotificationListFragment();
     }
@@ -62,6 +67,8 @@ public class NotificationListFragment extends LoadingListFragmentBase implements
             if (!mAll && !mParticipating) {
                 mCallback.setNotificationsIndicatorVisible(!result.notifications.isEmpty());
             }
+
+            scrollToInitialNotification(result.notifications);
         }
     };
 
@@ -98,6 +105,7 @@ public class NotificationListFragment extends LoadingListFragmentBase implements
         super.onActivityCreated(savedInstanceState);
         setContentShown(false);
         getLoaderManager().initLoader(0, null, mNotificationsCallback);
+        NotificationsJob.markNotificationsAsSeen(getActivity());
     }
 
     @Override
@@ -253,6 +261,34 @@ public class NotificationListFragment extends LoadingListFragmentBase implements
             }
         }
         updateMenuItemVisibility();
+    }
+
+    private void scrollToInitialNotification(List<NotificationHolder> notifications) {
+        Bundle extras = getActivity().getIntent().getExtras();
+        if (extras == null) {
+            return;
+        }
+
+        String repoOwner = extras.getString(EXTRA_INITIAL_REPO_OWNER);
+        String repoName = extras.getString(EXTRA_INITIAL_REPO_NAME);
+        extras.remove(EXTRA_INITIAL_REPO_OWNER);
+        extras.remove(EXTRA_INITIAL_REPO_NAME);
+
+        if (repoOwner == null || repoName == null) {
+            return;
+        }
+
+        for (int i = 0; i < notifications.size(); i++) {
+            NotificationHolder holder = notifications.get(i);
+            if (holder.notification == null) {
+                Repository repo = holder.repository;
+                if (repoOwner.equals(repo.getOwner().getLogin())
+                        && repoName.equals(repo.getName())) {
+                    scrollToAndHighlightPosition(i);
+                    break;
+                }
+            }
+        }
     }
 
     private class MarkReadTask extends BackgroundTask<Void> {
