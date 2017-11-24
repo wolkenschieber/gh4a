@@ -21,12 +21,13 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.annotation.StringRes;
 import android.support.design.widget.AppBarLayout;
 import android.support.design.widget.CoordinatorLayout;
 import android.support.v4.app.Fragment;
 import android.support.v4.content.Loader;
-import android.support.v7.app.ActionBar;
 import android.support.v7.app.AlertDialog;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -50,8 +51,8 @@ import com.gh4a.loader.IsCollaboratorLoader;
 import com.gh4a.loader.IssueLoader;
 import com.gh4a.loader.LoaderCallbacks;
 import com.gh4a.loader.LoaderResult;
+import com.gh4a.loader.PendingReviewLoader;
 import com.gh4a.loader.PullRequestLoader;
-import com.gh4a.loader.ReferenceLoader;
 import com.gh4a.utils.ApiHelpers;
 import com.gh4a.utils.IntentUtils;
 import com.gh4a.utils.UiUtils;
@@ -62,14 +63,13 @@ import org.eclipse.egit.github.core.Issue;
 import org.eclipse.egit.github.core.MergeStatus;
 import org.eclipse.egit.github.core.PullRequest;
 import org.eclipse.egit.github.core.PullRequestMarker;
-import org.eclipse.egit.github.core.Reference;
 import org.eclipse.egit.github.core.RepositoryId;
-import org.eclipse.egit.github.core.TypedResource;
+import org.eclipse.egit.github.core.Review;
 import org.eclipse.egit.github.core.User;
-import org.eclipse.egit.github.core.service.DataService;
 import org.eclipse.egit.github.core.service.PullRequestService;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Locale;
 
 public class PullRequestActivity extends BaseFragmentPagerActivity implements
@@ -92,6 +92,7 @@ public class PullRequestActivity extends BaseFragmentPagerActivity implements
     public static final int PAGE_FILES = 2;
 
     private static final int REQUEST_EDIT_ISSUE = 1001;
+    private static final int REQUEST_CREATE_REVIEW = 1002;
 
     private String mRepoOwner;
     private String mRepoName;
@@ -104,6 +105,8 @@ public class PullRequestActivity extends BaseFragmentPagerActivity implements
     private PullRequest mPullRequest;
     private PullRequestFragment mPullRequestFragment;
     private IssueStateTrackingFloatingActionButton mEditFab;
+    private Review mPendingReview;
+    private boolean mPendingReviewLoaded;
 
     private ViewGroup mHeader;
     private int[] mHeaderColorAttrs;
@@ -171,6 +174,29 @@ public class PullRequestActivity extends BaseFragmentPagerActivity implements
         }
     };
 
+    private final LoaderCallbacks<List<Review>> mPendingReviewCallback =
+            new LoaderCallbacks<List<Review>>(this) {
+        @Override
+        protected Loader<LoaderResult<List<Review>>> onCreateLoader() {
+            return new PendingReviewLoader(PullRequestActivity.this,
+                    mRepoOwner, mRepoName, mPullRequestNumber);
+        }
+
+        @Override
+        protected void onResultReady(List<Review> result) {
+            String ownLogin = Gh4Application.get().getAuthLogin();
+            mPendingReview = null;
+            for (Review review : result) {
+                if (ApiHelpers.loginEquals(review.getUser(), ownLogin)) {
+                    mPendingReview = review;
+                    break;
+                }
+            }
+            mPendingReviewLoaded = true;
+            supportInvalidateOptionsMenu();
+        }
+    };
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -181,16 +207,23 @@ public class PullRequestActivity extends BaseFragmentPagerActivity implements
         mHeader.setVisibility(View.GONE);
         addHeaderView(mHeader, !hasTabsInToolbar());
 
-        ActionBar actionBar = getSupportActionBar();
-        actionBar.setTitle(getResources().getString(R.string.pull_request_title) + " #" + mPullRequestNumber);
-        actionBar.setSubtitle(mRepoOwner + "/" + mRepoName);
-        actionBar.setDisplayHomeAsUpEnabled(true);
-
         setContentShown(false);
 
         getSupportLoaderManager().initLoader(0, null, mPullRequestCallback);
         getSupportLoaderManager().initLoader(1, null, mIssueCallback);
         getSupportLoaderManager().initLoader(2, null, mCollaboratorCallback);
+        getSupportLoaderManager().initLoader(3, null, mPendingReviewCallback);
+    }
+
+    @NonNull
+    protected String getActionBarTitle() {
+        return getString(R.string.pull_request_title) + " #" + mPullRequestNumber;
+    }
+
+    @Nullable
+    @Override
+    protected String getActionBarSubtitle() {
+        return mRepoOwner + "/" + mRepoName;
     }
 
     @Override
@@ -236,8 +269,16 @@ public class PullRequestActivity extends BaseFragmentPagerActivity implements
             menu.removeItem(R.id.browser);
             menu.removeItem(R.id.copy_number);
         }
+        if (!mPendingReviewLoaded || mPullRequest == null || isClosed) {
+            menu.removeItem(R.id.pull_review);
+        }
 
         return super.onCreateOptionsMenu(menu);
+    }
+
+    @Override
+    public boolean displayDetachAction() {
+        return true;
     }
 
     @Override
@@ -245,6 +286,9 @@ public class PullRequestActivity extends BaseFragmentPagerActivity implements
         switch (item.getItemId()) {
             case R.id.pull_merge:
                 showMergeDialog();
+                break;
+            case R.id.pull_review:
+                showReviewDialog();
                 break;
             case R.id.pull_close:
             case R.id.pull_reopen:
@@ -273,6 +317,14 @@ public class PullRequestActivity extends BaseFragmentPagerActivity implements
                 setResult(Activity.RESULT_OK);
                 onRefresh();
             }
+        } else if (requestCode == REQUEST_CREATE_REVIEW) {
+            if (resultCode == Activity.RESULT_OK) {
+                if (mPullRequestFragment != null) {
+                    mPullRequestFragment.reloadEvents(false);
+                }
+                // reload pending reviews
+                getSupportLoaderManager().getLoader(3).onContentChanged();
+            }
         } else {
             super.onActivityResult(requestCode, resultCode, data);
         }
@@ -295,6 +347,8 @@ public class PullRequestActivity extends BaseFragmentPagerActivity implements
         mIssue = null;
         mPullRequest = null;
         mIsCollaborator = null;
+        mPendingReview = null;
+        mPendingReviewLoaded = false;
         setContentShown(false);
         if (mEditFab != null) {
             mEditFab.post(new Runnable() {
@@ -306,8 +360,9 @@ public class PullRequestActivity extends BaseFragmentPagerActivity implements
         }
         mHeader.setVisibility(View.GONE);
         mHeaderColorAttrs = null;
-        forceLoaderReload(0, 1, 2);
+        forceLoaderReload(0, 1, 2, 3);
         invalidateTabs();
+        supportInvalidateOptionsMenu();
         super.onRefresh();
     }
 
@@ -425,7 +480,7 @@ public class PullRequestActivity extends BaseFragmentPagerActivity implements
         editor.setText(mPullRequest.getTitle());
 
         final ArrayAdapter<MergeMethodDesc> adapter = new ArrayAdapter<>(this,
-                R.layout.pull_merge_method_item);
+                R.layout.spinner_item);
         adapter.add(new MergeMethodDesc(R.string.pull_merge_method_merge,
                 PullRequestService.MERGE_METHOD_MERGE));
         adapter.add(new MergeMethodDesc(R.string.pull_merge_method_squash,
@@ -462,6 +517,12 @@ public class PullRequestActivity extends BaseFragmentPagerActivity implements
                 })
                 .setNegativeButton(getString(R.string.cancel), null)
                 .show();
+    }
+
+    private void showReviewDialog() {
+        Intent intent = CreateReviewActivity.makeIntent(this, mRepoOwner, mRepoName,
+                mPullRequestNumber, mPendingReview);
+        startActivityForResult(intent, REQUEST_CREATE_REVIEW);
     }
 
     private void updateFabVisibility() {

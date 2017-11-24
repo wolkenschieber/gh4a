@@ -328,7 +328,7 @@ public abstract class IssueFragmentBase extends ListDataBaseFragment<TimelineIte
     }
 
     private void updateCommentLockState() {
-        mBottomSheet.setLocked(isLocked());
+        mBottomSheet.setLocked(isLocked(), R.string.comment_editor_locked_hint);
     }
 
     private void fillData() {
@@ -506,18 +506,23 @@ public abstract class IssueFragmentBase extends ListDataBaseFragment<TimelineIte
     }
 
     @Override
-    public void onSendCommentInBackground(String comment) throws IOException {
+    public void onEditorSendInBackground(String comment) throws IOException {
         IssueService issueService = (IssueService)
                 Gh4Application.get().getService(Gh4Application.ISSUE_SERVICE);
         issueService.createComment(mRepoOwner, mRepoName, mIssue.getNumber(), comment);
     }
 
     @Override
-    public void onCommentSent() {
+    public void onEditorTextSent() {
         // reload comments
         if (isAdded()) {
             reloadEvents(false);
         }
+    }
+
+    @Override
+    public int getEditorErrorMessageResId() {
+        return R.string.issue_error_comment;
     }
 
     @Override
@@ -550,6 +555,17 @@ public abstract class IssueFragmentBase extends ListDataBaseFragment<TimelineIte
     @Override
     public void onScrollingInBasicEditor(boolean scrolling) {
         getBaseActivity().setAppBarLocked(scrolling);
+    }
+
+    @Override
+    public void onReplyCommentSelected(long replyToId) {
+        // Not used in this screen
+    }
+
+    @Override
+    public long getSelectedReplyCommentId() {
+        // Not used in this screen
+        return 0;
     }
 
     protected abstract void bindSpecialViews(View headerView);

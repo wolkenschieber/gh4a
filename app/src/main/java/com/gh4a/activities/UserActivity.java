@@ -4,8 +4,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
-import android.support.v7.app.ActionBar;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -49,13 +49,10 @@ public class UserActivity extends BaseFragmentPagerActivity {
         R.string.about, R.string.user_public_activity
     };
 
+    @Nullable
     @Override
-    public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-
-        ActionBar actionBar = getSupportActionBar();
-        actionBar.setTitle(mUserLogin);
-        actionBar.setDisplayHomeAsUpEnabled(true);
+    protected String getActionBarTitle() {
+        return mUserLogin;
     }
 
     @Override
@@ -94,10 +91,15 @@ public class UserActivity extends BaseFragmentPagerActivity {
     }
 
     @Override
+    public boolean displayDetachAction() {
+        return true;
+    }
+
+    @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         MenuInflater inflater = getMenuInflater();
         inflater.inflate(R.menu.user_menu, menu);
-        return true;
+        return super.onCreateOptionsMenu(menu);
     }
 
     @Override

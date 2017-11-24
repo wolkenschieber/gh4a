@@ -43,8 +43,9 @@ public class EditorBottomSheet extends FrameLayout implements View.OnClickListen
 
     public interface Callback {
         @StringRes int getCommentEditorHintResId();
-        void onSendCommentInBackground(String comment) throws IOException;
-        void onCommentSent();
+        @StringRes int getEditorErrorMessageResId();
+        void onEditorSendInBackground(String comment) throws IOException;
+        void onEditorTextSent();
         FragmentActivity getActivity();
         CoordinatorLayout getRootLayout();
     }
@@ -166,17 +167,23 @@ public class EditorBottomSheet extends FrameLayout implements View.OnClickListen
 
     public void setCallback(Callback callback) {
         mCallback = callback;
+        updateHint();
+    }
 
+    public void updateHint() {
+        if (mCallback == null) {
+            return;
+        }
         mBasicEditor.setCommentEditorHintResId(mCallback.getCommentEditorHintResId());
         if (mAdvancedEditor != null) {
             mAdvancedEditor.setCommentEditorHintResId(mCallback.getCommentEditorHintResId());
         }
     }
 
-    public void setLocked(boolean locked) {
-        mBasicEditor.setLocked(locked);
+    public void setLocked(boolean locked, @StringRes int lockedHintResId) {
+        mBasicEditor.setLocked(locked, lockedHintResId);
         if (mAdvancedEditor != null) {
-            mAdvancedEditor.setLocked(locked);
+            mAdvancedEditor.setLocked(locked, lockedHintResId);
         }
         mAdvancedEditorToggle.setVisibility(locked ? View.GONE : View.VISIBLE);
         setAdvancedMode(false);
@@ -235,7 +242,7 @@ public class EditorBottomSheet extends FrameLayout implements View.OnClickListen
                 setAdvancedMode(!isInAdvancedMode());
                 break;
             case R.id.send_button:
-                new CommentTask(getCommentText().toString()).schedule();
+                new SendTask(getCommentText().toString()).schedule();
                 UiUtils.hideImeForView(mCallback.getActivity().getCurrentFocus());
                 break;
         }
@@ -381,10 +388,8 @@ public class EditorBottomSheet extends FrameLayout implements View.OnClickListen
         mAdvancedEditor.addTextChangedListener(new UiUtils.ButtonEnableTextWatcher(mAdvancedEditor,
                 findViewById(R.id.send_button)));
 
-        if (mCallback != null) {
-            mAdvancedEditor.setCommentEditorHintResId(mCallback.getCommentEditorHintResId());
-        }
-        mAdvancedEditor.setLocked(mBasicEditor.isLocked());
+        updateHint();
+        mAdvancedEditor.setLocked(mBasicEditor.isLocked(), mBasicEditor.getLockedHintResId());
         mAdvancedEditor.setMentionUsers(mBasicEditor.getMentionUsers());
 
         mMarkdownButtons =
@@ -411,28 +416,28 @@ public class EditorBottomSheet extends FrameLayout implements View.OnClickListen
         return mBehavior;
     }
 
-    private class CommentTask extends ProgressDialogTask<Void> {
+    private class SendTask extends ProgressDialogTask<Void> {
         private final String mText;
 
-        public CommentTask(String text) {
-            super(mCallback.getActivity(), mCallback.getRootLayout(), R.string.saving_comment);
+        public SendTask(String text) {
+            super(mCallback.getActivity(), mCallback.getRootLayout(), R.string.saving_msg);
             mText = text;
         }
 
         @Override
         protected ProgressDialogTask<Void> clone() {
-            return new CommentTask(mText);
+            return new SendTask(mText);
         }
 
         @Override
         protected Void run() throws IOException {
-            mCallback.onSendCommentInBackground(mText);
+            mCallback.onEditorSendInBackground(mText);
             return null;
         }
 
         @Override
         protected void onSuccess(Void result) {
-            mCallback.onCommentSent();
+            mCallback.onEditorTextSent();
 
             setCommentText(null, true);
             setAdvancedMode(false);
@@ -440,7 +445,7 @@ public class EditorBottomSheet extends FrameLayout implements View.OnClickListen
 
         @Override
         protected String getErrorMessage() {
-            return getContext().getString(R.string.issue_error_comment);
+            return getContext().getString(mCallback.getEditorErrorMessageResId());
         }
     }
 
